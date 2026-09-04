@@ -101,6 +101,11 @@ export function createManifest(env: ConfigEnv): UserManifest {
         resources: ['pet/*.png', 'deepseek/*.wasm'],
         matches: ['*://chat.deepseek.com/*'],
       },
+      // GAL 酒馆舞台素材（立绘/背景/对话框），仅 DeepSeek 宿主可用
+      {
+        resources: ['gal/*.png'],
+        matches: ['*://chat.deepseek.com/*'],
+      },
       // sidepanel.html must be web-accessible on every host because the global
       // floating-chat ball embeds it in an iframe from any page. The whale
       // sprite is bundled with the button itself.

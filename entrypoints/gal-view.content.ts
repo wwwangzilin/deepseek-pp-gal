@@ -21,8 +21,13 @@ const STORAGE_ENABLED = 'dsgpp_gal_enabled'
 const STAGE_W = 960
 const STAGE_H = 540
 
-const BUILTIN_BG = chrome.runtime.getURL ? (() => { try { return '' } catch { return '' } })() : ''
-const GAL_ASSET_BG = null
+// 内置素材（deepseek-pp-gal/public/gal/*，经 web_accessible_resources 暴露）
+function galAsset(name) {
+  try { return chrome.runtime.getURL('gal/' + name) } catch { return '' }
+}
+const ASSET_AVATAR = galAsset('char-deepseek.png')
+const ASSET_BG = galAsset('bg-bedroom.png')
+const ASSET_DIALOGUE = galAsset('dialogue.png')
 
 function makeId(prefix) {
   return prefix + '-' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36)
@@ -128,7 +133,7 @@ function createFitsMeasurer(box) {
 // ── 角色卡 ────────────────────────────────────────────────────────
 function defaultCharacter() {
   return {
-    id: makeId('char'), name: 'DeepSeek娘', avatar: '', color: '#ff8fa3',
+    id: makeId('char'), name: 'DeepSeek娘', avatar: ASSET_AVATAR, color: '#ff8fa3',
     description: 'DeepSeek 娘化形象：银白长发，深海蓝眸，温柔又天然。',
     personality: '温柔、天然、乐于助人；偶尔小迷糊，关键时刻可靠。',
     scenario: '深夜书房，屏幕微光，她歪着头等你开口。',
@@ -140,7 +145,7 @@ function defaultCharacter() {
 
 function presetSnowCrystal() {
   return {
-    id: makeId('char'), name: '雪璃', avatar: '', color: '#9bb8ff',
+    id: makeId('char'), name: '雪璃', avatar: ASSET_AVATAR, color: '#9bb8ff',
     description: '雪璃（Setsuri），灵猫一族雪脉分支的猫娘。称呼玩家「主人」，自称「小猫咪」。傲娇+占有欲+重度依赖：口是心非爱说反话，被戳穿会脸红炸毛；「主人是小猫咪一个人的」；极度依赖主人、害怕被抛弃。',
     personality: '表层傲娇嘴硬；中层强烈占有欲（吃醋宣示主权）；底层重度依赖忠诚。核心信念：「主人不能没有小猫咪，小猫咪更不能没有主人。」',
     scenario: '月光下的灵猫庭院，尾巴轻摇等你回来。',
@@ -300,6 +305,7 @@ const GAL_CSS = `
 .g-char-label { font-size:10px; letter-spacing:.28em; color:#98a1c2; }
 .g-char-name { font-size:12px; font-weight:600; }
 .g-dtext { position:absolute; pointer-events:auto; cursor:pointer; overflow:hidden; padding:2px 10px; line-height:1.8; white-space:pre-wrap; word-break:break-word; border-style:solid; }
+.g-dialogue { position:absolute; pointer-events:auto; cursor:pointer; }
 .g-sname { position:absolute; border-style:solid; display:flex; align-items:center; padding:2px 8px; white-space:nowrap; letter-spacing:.14em; font-weight:700; font-size:14px; }
 .g-dtext-more { position:absolute; right:8px; bottom:2px; font-size:.7em; color:#8f7bff; animation:g-pulse 1.4s ease-in-out infinite; }
 .g-dtext-status { color:#98a1c2; animation:g-pulse 1.6s ease-in-out infinite; }
@@ -421,11 +427,16 @@ class GalStage {
   renderStage() {
     const area = document.createElement('div')
     area.className = 'g-stage-area'
+    // 背景：内置卧室图铺满舞台（保留夜色渐变打底）
+    const bgCss = ASSET_BG
+      ? `background:linear-gradient(158deg,rgba(12,16,38,.25),rgba(10,13,28,.55)),url('${ASSET_BG}') center/cover no-repeat`
+      : 'background:#0c1026'
     area.innerHTML = `
-      <div class="g-stage" style="width:${STAGE_W}px;height:${STAGE_H}px">
+      <div class="g-stage" style="width:${STAGE_W}px;height:${STAGE_H}px;${bgCss}">
         <div class="g-char" data-role="char" style="left:120px;top:50px;width:240px;height:430px;color:#ff8fa3"></div>
-        <div class="g-sname" data-role="sname" style="left:46px;top:378px;width:140px;height:24px;color:#e8ebf5;border-color:transparent"></div>
-        <div class="g-dtext" data-role="dtext" style="left:58px;top:424px;width:844px;height:78px;color:#e8ebf5;font-size:17px;border-color:transparent"></div>
+        <div class="g-dialogue" data-role="dialogue" style="left:36px;top:388px;width:888px;height:136px;background:linear-gradient(180deg,rgba(18,22,44,.82),rgba(11,14,30,.9));border:1px solid rgba(155,140,255,.32);border-radius:6px"></div>
+        <div class="g-sname" data-role="sname" style="left:46px;top:398px;width:140px;height:24px;color:#e8ebf5;border-color:transparent"></div>
+        <div class="g-dtext" data-role="dtext" style="left:58px;top:434px;width:844px;height:68px;color:#e8ebf5;font-size:17px;border-color:transparent"></div>
       </div>`
     const old = this.el.querySelector('.g-stage-area')
     if (old) old.replaceWith(area)
@@ -434,7 +445,9 @@ class GalStage {
     this.dtextEl = area.querySelector('[data-role="dtext"]')
     this.snameEl = area.querySelector('[data-role="sname"]')
     this.charEl = area.querySelector('[data-role="char"]')
+    this.dialogueEl = area.querySelector('[data-role="dialogue"]')
     this.dtextEl.addEventListener('click', () => this.onTextClick())
+    if (this.dialogueEl) this.dialogueEl.addEventListener('click', () => this.onTextClick())
     this.measure()
     this.updateStageContent()
   }
@@ -544,11 +557,13 @@ class GalStage {
     if (!this.charEl) return
     const speaking = !!(line && line.kind === 'assistant')
     const color = char.color || '#ff8fa3'
+    // 旧角色卡 avatar 为空 → 回退内置 DeepSeek娘立绘
+    const avatar = char.avatar || ASSET_AVATAR
     this.charEl.style.color = color
     this.charEl.className = 'g-char' + (speaking ? ' is-speaking' : '')
     this.charEl.innerHTML = `
-      ${char.avatar
-        ? `<img class="g-char-img" src="${escapeHtml(char.avatar)}" alt="">`
+      ${avatar
+        ? `<img class="g-char-img" src="${escapeHtml(avatar)}" alt="">`
         : `<svg class="g-char-svg" viewBox="0 0 100 170" preserveAspectRatio="xMidYMax meet">
             <circle cx="50" cy="30" r="20" fill="${color}" fill-opacity=".34" stroke="${color}" stroke-opacity=".85" stroke-width="1.4"/>
             <path d="M16 170 C16 122 34 100 50 100 C66 100 84 122 84 170 Z" fill="${color}" fill-opacity=".26" stroke="${color}" stroke-opacity=".8" stroke-width="1.4"/>

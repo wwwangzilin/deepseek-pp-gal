@@ -88,8 +88,10 @@ console.log('== 角色卡与 prompt ==')
   assert(m1 !== null && m2 !== null, '角色函数存在')
   if (m1 && m2) {
     const mkid = "function makeId(p){return p+'-'+Math.random().toString(36).slice(2,8)+Date.now().toString(36)}"
-    const mod = new Function(mkid + '\n' + m1[0] + '\n' + m2[0] + '\nreturn {defaultCharacter,buildCharacterSystemPrompt}')()
+    const stub = "const ASSET_AVATAR='chrome-extension://test/gal/char.png'"
+    const mod = new Function(mkid + '\n' + stub + '\n' + m1[0] + '\n' + m2[0] + '\nreturn {defaultCharacter,buildCharacterSystemPrompt}')()
     const c = mod.defaultCharacter()
+    assert(c.avatar === 'chrome-extension://test/gal/char.png', '默认角色带内置立绘')
     assert(c.name === 'DeepSeek娘' && c.id, '默认角色创建')
     const p = mod.buildCharacterSystemPrompt(c)
     assert(p.includes('你是「DeepSeek娘」'), 'prompt 含角色名')
@@ -103,9 +105,11 @@ console.log('== 雪璃预设 ==')
   assert(m !== null, '雪璃预设函数存在')
   if (m) {
     const mkid = "function makeId(p){return p+'-'+Math.random().toString(36).slice(2,8)+Date.now().toString(36)}"
-    const mod = new Function(mkid + '\n' + m[0] + '\nreturn {presetSnowCrystal}')()
+    const stub = "const ASSET_AVATAR='chrome-extension://test/gal/char.png'"
+    const mod = new Function(mkid + '\n' + stub + '\n' + m[0] + '\nreturn {presetSnowCrystal}')()
     const c = mod.presetSnowCrystal()
-    assert(c.name === '雪璃' && c.systemPrompt.includes('喵'), '雪璃预设含猫娘系统指令')
+    assert(c.name === '雪璃' && c.avatar === 'chrome-extension://test/gal/char.png', '雪璃预设带内置立绘')
+    assert(c.systemPrompt.includes('喵'), '雪璃预设含猫娘系统指令')
   }
 }
 
