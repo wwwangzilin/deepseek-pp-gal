@@ -1,0 +1,65 @@
+name: Request or question
+description: Request an improvement, update documentation, or ask a project question.
+title: "[Issue]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please keep this template intact and fill every required section. Issues that remove the required sections are closed automatically. Use the Bug report form for bugs.
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue type
+      description: Pick the closest category.
+      options:
+        - Feature request
+        - Documentation
+        - Question
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the issue or request in one or two sentences.
+      placeholder: What is the problem or requested change?
+    validations:
+      required: true
+  - type: textarea
+    id: expected-outcome
+    attributes:
+      label: Expected outcome
+      description: Describe what should happen when this is resolved.
+      placeholder: What result do you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: details-reproduction
+    attributes:
+      label: Details / reproduction
+      description: For bugs, include steps to reproduce. For requests, include the use case and any constraints.
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser, extension version, OS, and any relevant settings. Write N/A if this is not environment-specific.
+      placeholder: |
+        - Browser:
+        - Extension version:
+        - OS:
+    validations:
+      required: true
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add screenshots, logs, links, or other context if available.
+    validations:
+      required: false

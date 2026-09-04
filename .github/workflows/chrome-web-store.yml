@@ -1,0 +1,94 @@
+name: Chrome Web Store
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Check credentials without uploading'
+        required: true
+        type: boolean
+        default: true
+      submit_review:
+        description: 'Submit the uploaded package for Chrome Web Store review'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chrome-web-store-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Upload Chrome package
+    runs-on: ubuntu-latest
+
+    env:
+      CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+      CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+      CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+      CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Go for actionlint
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Install actionlint
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Chrome Web Store quality gates
+        run: npm run ci:quality
+
+      - name: Submit to Chrome Web Store
+        shell: bash
+        run: |
+          missing=0
+          for name in CHROME_EXTENSION_ID CHROME_CLIENT_ID CHROME_CLIENT_SECRET CHROME_REFRESH_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "$name secret is required" >&2
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+          VERSION="$(node -p "require('./package.json').version")"
+          CHROME_ZIP="dist/deepseek-plus-plus-${VERSION}-chrome.zip"
+          if [ ! -f "$CHROME_ZIP" ]; then
+            echo "Chrome zip not found: $CHROME_ZIP" >&2
+            exit 1
+          fi
+
+          args=(--chrome-zip "$CHROME_ZIP")
+
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            args+=(--dry-run)
+          fi
+
+          if [ "${{ inputs.submit_review }}" != "true" ]; then
+            args+=(--chrome-skip-submit-review)
+          else
+            args+=(--chrome-publish-target default)
+          fi
+
+          npx wxt submit "${args[@]}"

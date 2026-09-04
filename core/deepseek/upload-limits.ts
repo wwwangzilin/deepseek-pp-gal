@@ -1,0 +1,1 @@
+export const DEEPSEEK_IMAGE_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;

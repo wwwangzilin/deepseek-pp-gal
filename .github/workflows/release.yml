@@ -1,0 +1,179 @@
+name: Release Extension
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, for example v0.3.0'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Validate release ref
+        shell: bash
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          TAG="${INPUT_TAG:-${GITHUB_REF_NAME}}"
+          if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Release tag $TAG does not exist in the checked-out repository" >&2
+            exit 1
+          fi
+
+          TAG_SHA="$(git rev-list -n 1 "$TAG")"
+          HEAD_SHA="$(git rev-parse HEAD)"
+          if [ "$HEAD_SHA" != "$TAG_SHA" ]; then
+            echo "Checked-out HEAD $HEAD_SHA does not match release tag $TAG ($TAG_SHA)" >&2
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Setup Go for actionlint
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Install actionlint
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run release quality gates
+        run: npm run ci:quality
+
+      - name: Publish Shell Host npm package
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          TAG="${INPUT_TAG:-${GITHUB_REF_NAME}}"
+          VERSION="${TAG#v}"
+          ROOT_VERSION="$(node -p "require('./package.json').version")"
+          SHELL_VERSION="$(node -p "require('./packages/shell-host/package.json').version")"
+
+          if [ "$ROOT_VERSION" != "$VERSION" ]; then
+            echo "package.json version $ROOT_VERSION does not match release tag $TAG" >&2
+            exit 1
+          fi
+          if [ "$SHELL_VERSION" != "$VERSION" ]; then
+            echo "packages/shell-host/package.json version $SHELL_VERSION does not match release tag $TAG" >&2
+            exit 1
+          fi
+
+          read_published_version() {
+            npm view "deepseek-pp-shell-host@$VERSION" version --prefer-online 2>/dev/null || true
+          }
+
+          wait_for_published_version() {
+            local attempts="$1"
+            local attempt
+            PUBLISHED_VERSION=""
+            for attempt in $(seq 1 "$attempts"); do
+              PUBLISHED_VERSION="$(read_published_version)"
+              if [ "$PUBLISHED_VERSION" = "$VERSION" ]; then
+                return 0
+              fi
+              if [ "$attempt" -lt "$attempts" ]; then
+                sleep 5
+              fi
+            done
+            return 1
+          }
+
+          if wait_for_published_version 1; then
+            echo "deepseek-pp-shell-host@$VERSION is already published"
+            exit 0
+          fi
+
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "NPM_TOKEN secret is required because deepseek-pp-shell-host@$VERSION is not published." >&2
+            exit 1
+          fi
+
+          npm publish --workspace packages/shell-host --access public
+          if ! wait_for_published_version 12; then
+            echo "npm publish completed but registry does not expose deepseek-pp-shell-host@$VERSION" >&2
+            exit 1
+          fi
+
+      - name: Locate packages
+        id: package
+        shell: bash
+        run: |
+          mapfile -t ZIP_FILES < <(find dist -maxdepth 1 -type f -name '*.zip' | sort)
+          if [ "${#ZIP_FILES[@]}" -ne 4 ]; then
+            echo "Expected 4 zip packages in dist/, found ${#ZIP_FILES[@]}" >&2
+            printf '%s\n' "${ZIP_FILES[@]}" >&2
+            exit 1
+          fi
+
+          {
+            echo "zip_files<<EOF"
+            printf '%s\n' "${ZIP_FILES[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZIP_FILES: ${{ steps.package.outputs.zip_files }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          TAG="${INPUT_TAG:-${GITHUB_REF_NAME}}"
+          VERSION="${TAG#v}"
+          TITLE="DeepSeek++ ${VERSION}"
+          NOTES_FILE="docs/releases/${VERSION}.md"
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          mapfile -t RELEASE_FILES <<< "$ZIP_FILES"
+
+          if [ "$PACKAGE_VERSION" != "$VERSION" ]; then
+            echo "package.json version $PACKAGE_VERSION does not match release tag $TAG" >&2
+            exit 1
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${RELEASE_FILES[@]}" --clobber
+          else
+            create_args=("$TAG" "${RELEASE_FILES[@]}" --title "$TITLE")
+            if [ -f "$NOTES_FILE" ]; then
+              create_args+=(--notes-file "$NOTES_FILE")
+            else
+              create_args+=(--generate-notes)
+            fi
+            if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+              create_args+=(--target "$GITHUB_SHA")
+            fi
+            gh release create "${create_args[@]}"
+          fi

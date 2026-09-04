@@ -1,0 +1,18 @@
+{
+  "name": "deepseek-pp-promo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx --yes hyperframes@0.6.114 preview",
+    "check": "npx --yes hyperframes@0.6.114 lint && npx --yes hyperframes@0.6.114 validate && npx --yes hyperframes@0.6.114 inspect",
+    "tts:setup": "uv venv --python 3.12 .venv-tts && uv pip install --python .venv-tts/bin/python edge-tts",
+    "tts:edge": "PATH=\"$PWD/.venv-tts/bin:$PATH\" edge-tts --file narration.txt --voice zh-CN-XiaoxiaoNeural --rate=+17% --write-media assets/narration-edge.mp3 && $(node -p \"require('@ffmpeg-installer/ffmpeg').path\") -y -i assets/narration-edge.mp3 -ar 48000 -ac 2 assets/narration.wav && rm -f assets/narration-edge.mp3",
+    "render": "npx --yes hyperframes@0.6.114 render",
+    "render:local": "HYPERFRAMES_FFMPEG_PATH=$(node -p \"require('@ffmpeg-installer/ffmpeg').path\") HYPERFRAMES_FFPROBE_PATH=$(node -p \"require('@ffprobe-installer/ffprobe').path\") npx --yes hyperframes@0.6.114 render --output renders/deepseek-pp-promo.mp4 --quality standard --fps 30",
+    "publish": "npx --yes hyperframes@0.6.114 publish"
+  },
+  "devDependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffprobe-installer/ffprobe": "^2.1.2"
+  }
+}

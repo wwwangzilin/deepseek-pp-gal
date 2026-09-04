@@ -1,0 +1,5 @@
+node_modules/
+.hyperframes/
+.venv-tts/
+assets/narration-edge.mp3
+assets/narration-edge.vtt

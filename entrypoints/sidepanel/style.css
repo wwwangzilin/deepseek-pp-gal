@@ -1,0 +1,1975 @@
+@import 'tailwindcss';
+
+/*
+  Editorial Terminal palette.
+  - Neutrals are cool-tinted toward blue (subconscious brand cohesion) but kept
+    restrained so they never read as "blue theme".
+  - Blue is the ONLY interaction accent: clickable / focus / active. It is
+    deliberately withheld from bubbles, dividers and decoration so it stays loud.
+  - All colors in oklch for perceptual uniformity and easy dark derivation.
+*/
+:root {
+  color-scheme: light;
+
+  /* Ink scale — primary text → quiet */
+  --ds-text:          oklch(0.24 0.018 264);
+  --ds-text-secondary: oklch(0.52 0.020 264);
+  --ds-text-tertiary: oklch(0.70 0.015 264);
+  --ds-text-on-primary: oklch(0.99 0.002 264);
+
+  /* Paper scale — surfaces, kept tinted not white */
+  --ds-shell-bg: oklch(0.975 0.004 264);
+  --ds-bg:       oklch(0.985 0.004 264);
+  --ds-card:     oklch(0.998 0.002 264);
+  --ds-surface:  oklch(0.965 0.005 264);
+  --ds-surface-hover: oklch(0.95 0.006 264);
+  --ds-bg-rgb: 250, 251, 253;
+
+  /* Lines — the elevation system, not shadows */
+  --ds-border:       oklch(0.90 0.008 264);
+  --ds-border-hover: oklch(0.84 0.012 264);
+  --ds-selected-border: oklch(0.62 0.19 264 / 0.30);
+
+  /* Accent — blue, reserved for interaction only */
+  --ds-blue:        oklch(0.62 0.19 264);   /* ≈ #4D6BFE */
+  --ds-blue-hover:  oklch(0.56 0.20 266);   /* ≈ #3B5BEE */
+  --ds-blue-soft:   oklch(0.68 0.17 264);
+  --ds-blue-light:  oklch(0.96 0.025 264);  /* pale wash for tinted panels */
+  --ds-blue-glow:   oklch(0.62 0.19 264 / 0.14);
+  --ds-blue-shadow: 0 1px 2px oklch(0.30 0.12 264 / 0.18);
+
+  /* Elevation — border + inset highlight instead of timid drop shadows.
+     Works in both themes, so dark mode finally gets depth. */
+  --ds-elevate-1: 0 0 0 1px var(--ds-border), inset 0 1px 0 oklch(1 0 0 / 0.05);
+  --ds-elevate-2: 0 0 0 1px var(--ds-border), 0 1px 2px oklch(0.25 0.02 264 / 0.05), inset 0 1px 0 oklch(1 0 0 / 0.06);
+  --ds-shadow-sm: var(--ds-elevate-1);
+  --ds-shadow-md: var(--ds-elevate-2);
+  --ds-shadow-lg: 0 0 0 1px var(--ds-border), 0 8px 24px oklch(0.25 0.04 264 / 0.10), inset 0 1px 0 oklch(1 0 0 / 0.07);
+
+  --ds-switch-thumb: oklch(0.998 0.002 264);
+  --ds-logo-gradient-end: oklch(0.72 0.13 264);
+
+  /* Shape language — mixed radii build hierarchy instead of uniform softness */
+  --radius-card: 0px;            /* editorial: cards are flat planes */
+  --radius-ctrl: 6px;            /* buttons / inputs get a crisp micro-radius */
+  --radius-pill: 999px;          /* tags / badges stay capsules */
+
+  /* Semantic colors */
+  --ds-danger:            oklch(0.64 0.22 25);
+  --ds-danger-bg:         oklch(0.96 0.03 25);
+  --ds-danger-bg-hover:   oklch(0.93 0.05 25);
+  --ds-danger-border:     oklch(0.88 0.06 25);
+  --ds-danger-border-hover: oklch(0.82 0.09 25);
+  --ds-success:           oklch(0.70 0.15 162);
+  --ds-success-bg:        oklch(0.96 0.03 162);
+  --ds-success-border:    oklch(0.88 0.07 162);
+  --ds-warning:           oklch(0.75 0.15 75);
+  --ds-warning-bg:        oklch(0.97 0.03 75);
+  --ds-warning-border:    oklch(0.90 0.06 75);
+  --ds-info:              oklch(0.62 0.17 250);
+  --ds-info-bg:           oklch(0.96 0.03 250);
+  --ds-info-border:       oklch(0.88 0.05 250);
+  --ds-purple:            oklch(0.62 0.18 300);
+  --ds-purple-bg:         oklch(0.96 0.03 300);
+  --ds-purple-border:     oklch(0.88 0.05 300);
+
+  --ds-type-user: var(--ds-info);
+  --ds-type-user-bg: var(--ds-info-bg);
+  --ds-type-user-border: var(--ds-info-border);
+  --ds-type-feedback: var(--ds-warning);
+  --ds-type-feedback-bg: var(--ds-warning-bg);
+  --ds-type-feedback-border: var(--ds-warning-border);
+  --ds-type-topic: var(--ds-purple);
+  --ds-type-topic-bg: var(--ds-purple-bg);
+  --ds-type-topic-border: var(--ds-purple-border);
+  --ds-type-reference: var(--ds-success);
+  --ds-type-reference-bg: var(--ds-success-bg);
+  --ds-type-reference-border: var(--ds-success-border);
+}
+
+/* Dark theme — defined once, applied by both explicit override and system. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --ds-text:          oklch(0.93 0.012 264);
+  --ds-text-secondary: oklch(0.76 0.015 264);
+  --ds-text-tertiary: oklch(0.60 0.015 264);
+  --ds-text-on-primary: oklch(0.18 0.02 264);
+
+  --ds-shell-bg: oklch(0.17 0.012 264);
+  --ds-bg:       oklch(0.19 0.012 264);
+  --ds-card:     oklch(0.22 0.014 264);
+  --ds-surface:  oklch(0.25 0.014 264);
+  --ds-surface-hover: oklch(0.29 0.015 264);
+  --ds-bg-rgb: 36, 38, 46;
+
+  --ds-border:       oklch(0.32 0.014 264);
+  --ds-border-hover: oklch(0.40 0.016 264);
+  --ds-selected-border: oklch(0.75 0.13 264 / 0.42);
+
+  --ds-blue:        oklch(0.75 0.14 264);
+  --ds-blue-hover:  oklch(0.82 0.12 264);
+  --ds-blue-soft:   oklch(0.80 0.11 264);
+  --ds-blue-light:  oklch(0.30 0.06 264 / 0.55);
+  --ds-blue-glow:   oklch(0.75 0.14 264 / 0.24);
+  --ds-blue-shadow: 0 1px 2px oklch(0.15 0.05 264 / 0.5);
+
+  /* Dark elevation: brighter top-line + inner shadow = real depth without glow */
+  --ds-elevate-1: 0 0 0 1px var(--ds-border), inset 0 1px 0 oklch(1 0 0 / 0.04);
+  --ds-elevate-2: 0 0 0 1px var(--ds-border), 0 1px 3px oklch(0.05 0.01 264 / 0.4), inset 0 1px 0 oklch(1 0 0 / 0.05);
+  --ds-shadow-sm: var(--ds-elevate-1);
+  --ds-shadow-md: var(--ds-elevate-2);
+  --ds-shadow-lg: 0 0 0 1px var(--ds-border), 0 12px 32px oklch(0.02 0.01 264 / 0.5), inset 0 1px 0 oklch(1 0 0 / 0.06);
+
+  --ds-switch-thumb: oklch(0.998 0.002 264);
+  --ds-logo-gradient-end: oklch(0.78 0.12 264);
+
+  --ds-danger:            oklch(0.72 0.18 25);
+  --ds-danger-bg:         oklch(0.30 0.06 25 / 0.5);
+  --ds-danger-bg-hover:   oklch(0.34 0.08 25 / 0.6);
+  --ds-danger-border:     oklch(0.55 0.12 25 / 0.5);
+  --ds-danger-border-hover: oklch(0.62 0.14 25 / 0.6);
+  --ds-success:           oklch(0.78 0.14 162);
+  --ds-success-bg:        oklch(0.32 0.05 162 / 0.45);
+  --ds-success-border:    oklch(0.55 0.10 162 / 0.5);
+  --ds-warning:           oklch(0.80 0.14 75);
+  --ds-warning-bg:        oklch(0.34 0.06 75 / 0.45);
+  --ds-warning-border:    oklch(0.58 0.10 75 / 0.5);
+  --ds-info:              oklch(0.75 0.13 250);
+  --ds-info-bg:           oklch(0.32 0.05 250 / 0.45);
+  --ds-info-border:       oklch(0.55 0.09 250 / 0.5);
+  --ds-purple:            oklch(0.74 0.14 300);
+  --ds-purple-bg:         oklch(0.33 0.05 300 / 0.45);
+  --ds-purple-border:     oklch(0.56 0.10 300 / 0.5);
+}
+
+/* System-dark fallback when no explicit override is set. Mirrors [data-theme='dark']. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --ds-text:          oklch(0.93 0.012 264);
+    --ds-text-secondary: oklch(0.76 0.015 264);
+    --ds-text-tertiary: oklch(0.60 0.015 264);
+    --ds-text-on-primary: oklch(0.18 0.02 264);
+    --ds-shell-bg: oklch(0.17 0.012 264);
+    --ds-bg:       oklch(0.19 0.012 264);
+    --ds-card:     oklch(0.22 0.014 264);
+    --ds-surface:  oklch(0.25 0.014 264);
+    --ds-surface-hover: oklch(0.29 0.015 264);
+    --ds-bg-rgb: 36, 38, 46;
+    --ds-border:       oklch(0.32 0.014 264);
+    --ds-border-hover: oklch(0.40 0.016 264);
+    --ds-selected-border: oklch(0.75 0.13 264 / 0.42);
+    --ds-blue:        oklch(0.75 0.14 264);
+    --ds-blue-hover:  oklch(0.82 0.12 264);
+    --ds-blue-soft:   oklch(0.80 0.11 264);
+    --ds-blue-light:  oklch(0.30 0.06 264 / 0.55);
+    --ds-blue-glow:   oklch(0.75 0.14 264 / 0.24);
+    --ds-blue-shadow: 0 1px 2px oklch(0.15 0.05 264 / 0.5);
+    --ds-elevate-1: 0 0 0 1px var(--ds-border), inset 0 1px 0 oklch(1 0 0 / 0.04);
+    --ds-elevate-2: 0 0 0 1px var(--ds-border), 0 1px 3px oklch(0.05 0.01 264 / 0.4), inset 0 1px 0 oklch(1 0 0 / 0.05);
+    --ds-shadow-sm: var(--ds-elevate-1);
+    --ds-shadow-md: var(--ds-elevate-2);
+    --ds-shadow-lg: 0 0 0 1px var(--ds-border), 0 12px 32px oklch(0.02 0.01 264 / 0.5), inset 0 1px 0 oklch(1 0 0 / 0.06);
+    --ds-switch-thumb: oklch(0.998 0.002 264);
+    --ds-logo-gradient-end: oklch(0.78 0.12 264);
+    --ds-danger:            oklch(0.72 0.18 25);
+    --ds-danger-bg:         oklch(0.30 0.06 25 / 0.5);
+    --ds-danger-bg-hover:   oklch(0.34 0.08 25 / 0.6);
+    --ds-danger-border:     oklch(0.55 0.12 25 / 0.5);
+    --ds-danger-border-hover: oklch(0.62 0.14 25 / 0.6);
+    --ds-success:           oklch(0.78 0.14 162);
+    --ds-success-bg:        oklch(0.32 0.05 162 / 0.45);
+    --ds-success-border:    oklch(0.55 0.10 162 / 0.5);
+    --ds-warning:           oklch(0.80 0.14 75);
+    --ds-warning-bg:        oklch(0.34 0.06 75 / 0.45);
+    --ds-warning-border:    oklch(0.58 0.10 75 / 0.5);
+    --ds-info:              oklch(0.75 0.13 250);
+    --ds-info-bg:           oklch(0.32 0.05 250 / 0.45);
+    --ds-info-border:       oklch(0.55 0.09 250 / 0.5);
+    --ds-purple:            oklch(0.74 0.14 300);
+    --ds-purple-bg:         oklch(0.33 0.05 300 / 0.45);
+    --ds-purple-border:     oklch(0.56 0.10 300 / 0.5);
+  }
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans SC', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font-feature-settings: 'tnum' 1, 'cv11' 1;
+  font-variant-numeric: tabular-nums;
+  background: var(--ds-shell-bg);
+  color: var(--ds-text);
+  min-width: 320px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ds-border-hover);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ds-text-tertiary);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animate-slide-down {
+  animation: slideDown 0.25s ease-out;
+}
+
+/* Reduced-motion: kill every decorative animation so the UI is still fully
+   usable without movement. State changes still apply instantly. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-slide-down,
+  .ds-whats-new-popover,
+  .ds-modal-overlay,
+  .ds-modal-card {
+    animation: none !important;
+  }
+  .ds-chat-caret {
+    animation: none !important;
+    opacity: 0.8;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+input:focus, textarea:focus {
+  outline: none;
+  border-color: var(--ds-blue) !important;
+  box-shadow: 0 0 0 3px var(--ds-blue-glow) !important;
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--ds-text-tertiary);
+}
+
+input,
+textarea,
+select {
+  color-scheme: inherit;
+}
+
+input[type='checkbox'],
+input[type='range'] {
+  accent-color: var(--ds-blue);
+}
+
+.ds-app-shell {
+  display: flex;
+  height: 100vh;
+  min-width: 320px;
+  flex-direction: column;
+  background: var(--ds-shell-bg);
+}
+
+.ds-app-main {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--ds-bg);
+}
+
+.ds-whats-new-popover {
+  padding: 12px 12px 0;
+  animation: slideDown 0.22s ease-out;
+}
+
+.ds-whats-new-panel {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 14px;
+  border: 1px solid var(--ds-selected-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ds-card) 94%, var(--ds-blue-light));
+  box-shadow: var(--ds-shadow-lg);
+}
+
+.ds-whats-new-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ds-whats-new-kicker {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--ds-selected-border);
+  border-radius: 999px;
+  color: var(--ds-blue);
+  background: var(--ds-blue-light);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.ds-whats-new-title {
+  margin: 8px 0 0;
+  color: var(--ds-text);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.ds-whats-new-subtitle {
+  margin: 5px 0 0;
+  color: var(--ds-text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.ds-whats-new-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ds-whats-new-item {
+  display: grid;
+  grid-template-columns: 10px 1fr;
+  gap: 8px;
+  align-items: start;
+  color: var(--ds-text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.ds-whats-new-marker {
+  width: 5px;
+  height: 5px;
+  margin-top: 7px;
+  border-radius: 999px;
+  background: var(--ds-blue);
+  box-shadow: 0 0 0 3px var(--ds-blue-glow);
+}
+
+.ds-whats-new-dismiss {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 13px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--ds-text-on-primary);
+  background: var(--ds-blue);
+  box-shadow: var(--ds-shadow-sm);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.ds-whats-new-dismiss:hover {
+  background: var(--ds-blue-hover);
+}
+
+.ds-whats-new-dismiss:active {
+  transform: translateY(0);
+}
+
+/* Top tabs */
+.side-tabs {
+  display: flex;
+  flex: 0 0 44px;
+  align-items: flex-end;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--ds-border);
+  background: var(--ds-card);
+  -webkit-overflow-scrolling: touch;
+}
+
+.side-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.side-tab {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 52px;
+  height: 44px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ds-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.side-tab:hover {
+  background: color-mix(in srgb, var(--ds-surface) 62%, transparent);
+  color: var(--ds-text);
+}
+
+.side-tab-active,
+.side-tab-active:hover {
+  color: var(--ds-blue);
+}
+
+.side-tab-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.side-tab-label {
+  white-space: nowrap;
+  word-break: keep-all;
+}
+
+.side-tab-indicator {
+  position: absolute;
+  right: 10px;
+  bottom: -1px;
+  left: 10px;
+  height: 2px;
+  border-radius: 0;
+  background: var(--ds-blue);
+}
+
+@media (min-width: 520px) {
+  .side-tabs {
+    justify-content: space-between;
+    gap: 4px;
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .side-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+}
+
+@media (max-width: 420px) {
+  .side-tabs {
+    gap: 0;
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+
+  .side-tab {
+    min-width: 0;
+    height: 40px;
+    gap: 3px;
+    padding-right: 6px;
+    padding-left: 6px;
+    font-size: 12px;
+  }
+
+  .side-tab-icon {
+    width: 13px;
+    height: 13px;
+  }
+}
+
+/* Card — flat editorial plane; depth comes from the line, not a shadow */
+.ds-card {
+  background: var(--ds-card);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--radius-card);
+  box-shadow: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.ds-card:hover {
+  border-color: var(--ds-border-hover);
+  background: color-mix(in srgb, var(--ds-card) 94%, var(--ds-surface));
+}
+
+/* Form container */
+.ds-form {
+  background: var(--ds-card);
+  border: 1px solid var(--ds-selected-border);
+  box-shadow: 0 0 0 3px var(--ds-blue-glow);
+}
+
+/* Input / textarea */
+.ds-input {
+  background: var(--ds-card);
+  border: 1px solid var(--ds-border);
+  color: var(--ds-text);
+}
+
+/* Surface panel */
+.ds-surface-panel {
+  background: color-mix(in srgb, var(--ds-card) 88%, var(--ds-bg));
+  border: 1px solid var(--ds-border);
+  border-radius: var(--radius-card);
+  box-shadow: none;
+}
+
+/* Buttons */
+.ds-btn-primary {
+  background: var(--ds-blue);
+  color: var(--ds-text-on-primary);
+  box-shadow: var(--ds-shadow-sm);
+  border: 1px solid var(--ds-blue);
+}
+.ds-btn-primary:hover {
+  background: var(--ds-blue-hover);
+  border-color: var(--ds-blue-hover);
+}
+
+.ds-btn-secondary {
+  background: color-mix(in srgb, var(--ds-card) 78%, var(--ds-surface));
+  color: var(--ds-text-secondary);
+  border: 1px solid var(--ds-border);
+}
+.ds-btn-secondary:hover {
+  border-color: var(--ds-border-hover);
+  color: var(--ds-text);
+  background: var(--ds-card);
+}
+
+.ds-btn-cancel {
+  color: var(--ds-text-secondary);
+  border: 1px solid var(--ds-border);
+  background: transparent;
+}
+.ds-btn-cancel:hover {
+  border-color: var(--ds-border-hover);
+  color: var(--ds-text);
+  background: var(--ds-card);
+}
+
+.ds-btn-danger {
+  background: var(--ds-danger-bg);
+  color: var(--ds-danger);
+  border: 1px solid var(--ds-danger-border);
+}
+.ds-btn-danger:hover {
+  background: var(--ds-danger-bg-hover);
+  border-color: var(--ds-danger-border-hover);
+}
+
+/* Icon action buttons (in cards) */
+.ds-action-btn {
+  color: var(--ds-text-tertiary);
+  transition: all 0.1s;
+}
+.ds-action-btn:hover {
+  background: var(--ds-surface-hover);
+}
+.ds-action-btn-pin:hover {
+  color: var(--ds-warning);
+}
+.ds-action-btn-edit:hover {
+  color: var(--ds-blue);
+}
+.ds-action-btn-delete:hover {
+  background: var(--ds-danger-bg);
+  color: var(--ds-danger);
+}
+
+/* Inline delete text button (in SkillCard) */
+.ds-text-btn-delete {
+  color: var(--ds-text-tertiary);
+}
+.ds-text-btn-delete:hover {
+  background: var(--ds-danger-bg);
+  color: var(--ds-danger);
+}
+
+/* Tags */
+.ds-tag {
+  color: var(--ds-text-tertiary);
+  background: var(--ds-surface);
+  border: 1px solid transparent;
+}
+
+/* Code inline */
+.ds-code {
+  color: var(--ds-blue);
+  background: var(--ds-blue-glow);
+}
+
+/* Success badge */
+.ds-badge-success {
+  color: var(--ds-success);
+  background: var(--ds-success-bg);
+  border: 1px solid var(--ds-success-border);
+}
+
+.ds-badge-info {
+  color: var(--ds-info);
+  background: var(--ds-info-bg);
+  border: 1px solid var(--ds-info-border);
+}
+
+.ds-badge-warning {
+  color: var(--ds-warning);
+  background: var(--ds-warning-bg);
+  border: 1px solid var(--ds-warning-border);
+}
+
+/* Trigger code */
+.ds-trigger {
+  color: var(--ds-blue);
+  background: var(--ds-blue-light);
+}
+
+/* Info panel */
+.ds-info-panel {
+  background: color-mix(in srgb, var(--ds-blue-light) 58%, var(--ds-card));
+  border: 1px solid var(--ds-selected-border);
+}
+
+/* Page intro — editorial masthead: generous breathing room + bottom rule */
+.ds-page-intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0 16px;
+  border-bottom: 1px solid var(--ds-border);
+  margin-bottom: 18px;
+}
+
+.ds-page-intro-title {
+  margin: 0;
+  color: var(--ds-text);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+
+.ds-page-intro-description {
+  margin: 8px 0 0;
+  max-width: 34rem;
+  color: var(--ds-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ds-page-intro-meta {
+  flex: 0 0 auto;
+  color: var(--ds-text-tertiary);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.ds-page-intro-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.ds-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 280px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+/* Drop the templated rounded-icon-in-a-box. The icon container is now a thin
+   monospace glyph chip — restrained, not decorative — so it reads as a quiet
+   prompt marker instead of a stock empty-state illustration. */
+.ds-empty-state-icon {
+  display: flex;
+  width: auto;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--radius-ctrl);
+  background: transparent;
+  color: var(--ds-text-tertiary);
+}
+
+.ds-empty-state-title {
+  color: var(--ds-text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.ds-empty-state-description {
+  max-width: 290px;
+  color: var(--ds-text-tertiary);
+  font-size: 12px;
+  line-height: 1.58;
+}
+
+/* Loading skeleton — shimmer placeholder for first-paint lists */
+.ds-skeleton {
+  display: block;
+  height: 10px;
+  background: linear-gradient(
+    90deg,
+    var(--ds-surface) 0%,
+    color-mix(in srgb, var(--ds-surface) 60%, var(--ds-card)) 50%,
+    var(--ds-surface) 100%
+  );
+  background-size: 200% 100%;
+  animation: ds-skeleton-shimmer 1.3s ease-in-out infinite;
+}
+
+@keyframes ds-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-skeleton { animation: none; }
+}
+
+/* SegmentedControl container — flex handled by utility classes, this just
+   reserves the hook for future theming without overriding layout. */
+.ds-segmented {
+  /* layout via Tailwind flex/flex-wrap/gap classes on the element */
+}
+
+/* Chat */
+.ds-chat-page {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--ds-bg);
+}
+
+.ds-chat-auth-empty {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+}
+
+.ds-chat-header {
+  flex: 0 0 auto;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--ds-border);
+}
+
+.ds-chat-header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ds-chat-header-actions,
+.ds-chat-composer-buttons {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.ds-chat-subtitle {
+  margin: 4px 0 0;
+  color: var(--ds-text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.ds-chat-provider-badge,
+.ds-chat-current-config {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  border-radius: 999px;
+  background: var(--ds-surface);
+  color: var(--ds-text-tertiary);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.ds-chat-provider-badge {
+  padding: 3px 7px;
+}
+
+.ds-chat-current-config {
+  max-width: 220px;
+  overflow: hidden;
+  padding: 3px 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-chat-icon-button {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--radius-ctrl);
+  background: var(--ds-surface);
+  color: var(--ds-text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.ds-chat-icon-button:hover {
+  border-color: var(--ds-border-hover);
+  color: var(--ds-text);
+}
+
+.ds-chat-icon-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.ds-chat-text-button {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--radius-ctrl);
+  background: var(--ds-surface);
+  color: var(--ds-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 0 10px;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.ds-chat-text-button:hover {
+  border-color: var(--ds-border-hover);
+  color: var(--ds-text);
+}
+
+.ds-chat-config-panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ds-chat-control-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.ds-chat-control-group {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 4px;
+  min-width: 0;
+  border-radius: 10px;
+  background: var(--ds-surface);
+  padding: 3px;
+}
+
+.ds-chat-segment {
+  min-width: 0;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ds-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ds-chat-segment:hover {
+  color: var(--ds-text);
+}
+
+.ds-chat-segment-active {
+  background: var(--ds-card);
+  color: var(--ds-blue);
+  box-shadow: var(--ds-shadow-sm);
+}
+
+.ds-chat-segment:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.ds-chat-effort-select {
+  width: 92px;
+  height: 34px;
+  border: 1px solid var(--ds-border);
+  border-radius: 10px;
+  background: var(--ds-surface);
+  color: var(--ds-text-secondary);
+  font: inherit;
+  font-size: 11px;
+  outline: none;
+  padding: 0 8px;
+}
+
+.ds-chat-effort-select:disabled {
+  color: var(--ds-text-tertiary);
+  opacity: 0.6;
+}
+
+.ds-chat-messages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 14px 18px;
+}
+
+.ds-chat-empty {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px 20px;
+  text-align: center;
+}
+
+.ds-chat-message-row {
+  display: flex;
+  margin-bottom: 16px;
+}
+
+.ds-chat-message-row-user {
+  justify-content: flex-end;
+}
+
+.ds-chat-message-row-assistant {
+  justify-content: flex-start;
+}
+
+.ds-chat-message {
+  font-size: 13px;
+  line-height: 1.72;
+}
+
+.ds-chat-message-user {
+  max-width: min(86%, 420px);
+  border-radius: 2px 14px 14px 14px;
+  background: var(--ds-surface);
+  color: var(--ds-text);
+  padding: 8px 12px;
+  box-shadow: var(--ds-shadow-sm);
+  border: 1px solid var(--ds-border);
+}
+
+.ds-chat-message-assistant {
+  width: 100%;
+  max-width: 100%;
+  color: var(--ds-text);
+}
+
+.ds-chat-thinking {
+  margin-bottom: 8px;
+  border-left: 2px solid var(--ds-border);
+  padding-left: 10px;
+  color: var(--ds-text-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ds-chat-thinking summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--ds-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  list-style: none;
+}
+
+.ds-chat-thinking summary::-webkit-details-marker {
+  display: none;
+}
+
+.ds-chat-thinking summary::before {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 7px;
+  border-radius: 999px;
+  background: var(--ds-blue);
+  vertical-align: 1px;
+}
+
+.ds-chat-thinking div {
+  margin-top: 6px;
+}
+
+.ds-chat-caret {
+  display: inline-block;
+  width: 2px;
+  height: 15px;
+  margin-left: 2px;
+  background: var(--ds-text);
+  vertical-align: -2px;
+  animation: caretPulse 0.9s ease-in-out infinite;
+}
+
+@keyframes caretPulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+.ds-chat-error {
+  margin: 10px auto 0;
+  border: 1px solid var(--ds-danger-border);
+  border-radius: var(--radius-ctrl);
+  background: var(--ds-danger-bg);
+  color: var(--ds-danger);
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 8px 10px;
+}
+
+.ds-chat-composer-wrap {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--ds-border);
+  padding: 10px 12px 12px;
+  background: color-mix(in srgb, var(--ds-bg) 94%, var(--ds-surface));
+}
+
+.ds-chat-composer {
+  position: relative;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--radius-ctrl);
+  background: var(--ds-card);
+  box-shadow: var(--ds-shadow-sm);
+  padding: 8px;
+}
+
+/* #475 P1: @ file reference panel anchored above the composer. */
+.ds-chat-at-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+  background: var(--ds-card);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--radius-ctrl);
+  box-shadow: var(--ds-shadow-lg);
+  overflow: hidden;
+}
+
+.ds-chat-at-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ds-border);
+}
+
+.ds-chat-at-panel-body {
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.ds-chat-at-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.ds-chat-at-row:hover {
+  background: var(--ds-surface);
+}
+
+.ds-chat-at-row-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ds-chat-at-row-disabled:hover {
+  background: transparent;
+}
+
+.ds-chat-at-name {
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-chat-at-path {
+  display: block;
+  font-size: 10px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-chat-at-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.ds-chat-at-empty {
+  padding: 10px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.ds-chat-file-input {
+  display: none;
+}
+
+.ds-chat-input {
+  display: block;
+  width: 100%;
+  min-height: 42px;
+  max-height: 150px;
+  resize: none;
+  border: 0;
+  background: transparent;
+  color: var(--ds-text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  outline: none;
+  padding: 4px 4px 2px;
+}
+
+.ds-chat-input:focus {
+  box-shadow: none !important;
+}
+
+.ds-chat-attachments {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.ds-chat-attachment {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--radius-ctrl);
+  background: var(--ds-surface);
+  padding: 4px 5px 4px 4px;
+}
+
+.ds-chat-attachment-ready {
+  border-color: color-mix(in srgb, var(--ds-blue) 32%, var(--ds-border));
+}
+
+.ds-chat-attachment-error {
+  border-color: var(--ds-danger-border);
+  background: var(--ds-danger-bg);
+}
+
+.ds-chat-attachment-thumb {
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  object-fit: cover;
+  background: var(--ds-card);
+}
+
+.ds-chat-attachment-body {
+  min-width: 0;
+}
+
+.ds-chat-attachment-name,
+.ds-chat-attachment-status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-chat-attachment-name {
+  color: var(--ds-text);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.ds-chat-attachment-status {
+  margin-top: 2px;
+  color: var(--ds-text-tertiary);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.ds-chat-attachment-error .ds-chat-attachment-status {
+  color: var(--ds-danger);
+}
+
+.ds-chat-attachment-remove {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ds-text-tertiary);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.ds-chat-attachment-remove:hover {
+  background: var(--ds-card);
+  color: var(--ds-text);
+}
+
+.ds-chat-attachment-remove svg {
+  width: 13px;
+  height: 13px;
+}
+
+.ds-chat-composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.ds-chat-send-button {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-ctrl);
+  background: var(--ds-blue);
+  color: var(--ds-text-on-primary);
+  cursor: pointer;
+  box-shadow: var(--ds-shadow-sm);
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.ds-chat-send-button:hover {
+  background: var(--ds-blue-hover);
+}
+
+.ds-chat-send-button:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.ds-chat-send-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.ds-chat-attachment-button {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--radius-ctrl);
+  background: var(--ds-surface);
+  color: var(--ds-text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.ds-chat-attachment-button:hover {
+  border-color: var(--ds-border-hover);
+  color: var(--ds-text);
+}
+
+.ds-chat-attachment-button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.ds-chat-attachment-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.ds-chat-mic-button {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--radius-ctrl);
+  background: var(--ds-surface);
+  color: var(--ds-text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.ds-chat-mic-button:hover {
+  border-color: var(--ds-border-hover);
+  color: var(--ds-text);
+}
+
+.ds-chat-mic-button-active {
+  border-color: var(--ds-danger);
+  background: var(--ds-danger-bg);
+  color: var(--ds-danger);
+}
+
+.ds-chat-mic-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.ds-chat-send-dots {
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+
+@media (max-width: 420px) {
+  .ds-page-intro {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .ds-page-intro-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .ds-chat-header {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .ds-chat-control-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ds-chat-effort-select {
+    width: 100%;
+  }
+
+  .ds-chat-current-config {
+    max-width: 180px;
+  }
+}
+
+/* Sub-tabs (capability pages) */
+.sub-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--ds-border);
+  background: var(--ds-card);
+  -webkit-overflow-scrolling: touch;
+}
+
+.sub-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.sub-tab {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 54px;
+  height: 42px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ds-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.sub-tab::after {
+  position: absolute;
+  right: 10px;
+  bottom: -1px;
+  left: 10px;
+  height: 2px;
+  border-radius: 0;
+  background: transparent;
+  content: '';
+  transition: background-color 0.15s ease;
+}
+
+.sub-tab:hover {
+  background: color-mix(in srgb, var(--ds-surface) 58%, transparent);
+  color: var(--ds-text);
+}
+
+.sub-tab-active,
+.sub-tab-active:hover {
+  color: var(--ds-blue);
+  background: transparent;
+}
+
+.sub-tab-active::after {
+  background: var(--ds-blue);
+}
+
+/* Sub-tabs overflow chevrons: absolute overlays at the strip edges. A
+   button is shown only while that direction actually has hidden content
+   (disabled = display:none), fades the covered tabs with a card-colored
+   gradient, and uses the existing tab strip colors — no extra assets. */
+.sub-tabs-shell {
+  position: relative;
+}
+
+.sub-tabs-arrow {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  padding: 0;
+  border: 0;
+  color: var(--ds-text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.sub-tabs-arrow:disabled {
+  display: none;
+}
+
+.sub-tabs-arrow-left {
+  left: 0;
+  background: linear-gradient(to right, var(--ds-card) 55%, transparent);
+}
+
+.sub-tabs-arrow-right {
+  right: 0;
+  background: linear-gradient(to left, var(--ds-card) 55%, transparent);
+}
+
+.sub-tabs-arrow:hover .sub-tabs-arrow-icon {
+  color: var(--ds-text);
+}
+
+.sub-tabs-arrow-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.ds-switch-thumb {
+  background: var(--ds-switch-thumb);
+  box-shadow: var(--ds-shadow-sm);
+}
+
+/* Settings sub-tabs host: sticky sub-tabs + scrollable content */
+.ds-settings-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ds-settings-content {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px 28px;
+}
+
+/* Settings section headers — denser than ds-page-intro, ties to the panel below */
+.ds-settings-section-title {
+  margin: 0;
+  padding-left: 2px;
+  color: var(--ds-text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.3;
+}
+
+.ds-settings-section-description {
+  margin: 2px 0 0;
+  padding-left: 2px;
+  color: var(--ds-text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* Usage statistics: compact analytics, tuned for a narrow sidepanel. */
+.usage-dashboard {
+  container-type: inline-size;
+}
+
+.usage-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.usage-toolbar-label {
+  margin: 0 0 6px 2px;
+  color: var(--ds-text-tertiary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.usage-clear-button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-ctrl);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.usage-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.usage-metric-cell,
+.usage-panel {
+  background: color-mix(in srgb, var(--ds-card) 88%, var(--ds-bg));
+  border: 1px solid var(--ds-border);
+  border-radius: var(--radius-card);
+  box-shadow: none;
+}
+
+.usage-metric-cell {
+  min-width: 0;
+  padding: 12px;
+}
+
+.usage-metric-cell:first-child {
+  grid-column: 1 / -1;
+}
+
+.usage-metric-label {
+  color: var(--ds-text-tertiary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.usage-metric-value {
+  margin-top: 8px;
+  color: var(--ds-text);
+  font-size: 26px;
+  font-weight: 760;
+  letter-spacing: 0;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.usage-metric-detail {
+  margin-top: 6px;
+  color: var(--ds-text-tertiary);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.usage-panel {
+  padding: 12px;
+}
+
+.usage-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.usage-panel-heading h2 {
+  margin: 0;
+  color: var(--ds-text);
+  font-size: 12px;
+  font-weight: 760;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+}
+
+.usage-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ds-text-tertiary);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.usage-heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12px, 1fr));
+  gap: 6px;
+}
+
+.usage-heat-cell {
+  display: block;
+  width: 100%;
+  min-width: 10px;
+  aspect-ratio: 1;
+  border: 1px solid var(--ds-border);
+  border-radius: 4px;
+  background: var(--ds-surface);
+}
+
+.usage-legend-cell {
+  width: 13px;
+  min-width: 13px;
+}
+
+.usage-heat-cell[data-level='1'] {
+  background: color-mix(in srgb, var(--ds-blue-light) 72%, var(--ds-card));
+  border-color: color-mix(in srgb, var(--ds-blue) 18%, var(--ds-border));
+}
+
+.usage-heat-cell[data-level='2'] {
+  background: color-mix(in srgb, var(--ds-blue-light) 55%, var(--ds-blue));
+  border-color: color-mix(in srgb, var(--ds-blue) 35%, var(--ds-border));
+}
+
+.usage-heat-cell[data-level='3'] {
+  background: color-mix(in srgb, var(--ds-blue) 70%, var(--ds-blue-light));
+  border-color: color-mix(in srgb, var(--ds-blue) 60%, var(--ds-border));
+}
+
+.usage-heat-cell[data-level='4'] {
+  background: color-mix(in srgb, var(--ds-blue) 86%, var(--ds-success));
+  border-color: color-mix(in srgb, var(--ds-blue) 70%, var(--ds-border));
+}
+
+.usage-heat-cell[data-level='5'] {
+  background: color-mix(in srgb, var(--ds-blue) 78%, var(--ds-success));
+  border-color: color-mix(in srgb, var(--ds-success) 50%, var(--ds-blue));
+}
+
+.usage-bars {
+  display: grid;
+  /* Columns shrink to the panel width so a 30-day axis never overflows the
+     chart box; overflow is clipped only beyond the chart, never inside it. */
+  grid-template-columns: repeat(var(--usage-day-count, 30), minmax(0, 1fr));
+  align-items: end;
+  gap: var(--usage-bar-gap, 4px);
+  min-height: 150px;
+  overflow: hidden;
+}
+
+.usage-bar-column {
+  position: relative;
+  display: grid;
+  grid-template-rows: 118px 20px;
+  min-width: 0;
+  gap: 6px;
+}
+
+.usage-bar-track {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 118px;
+  border-bottom: 1px solid var(--ds-border);
+  background:
+    linear-gradient(to top, transparent 24%, var(--ds-border) 25%, transparent 26%),
+    linear-gradient(to top, transparent 49%, var(--ds-border) 50%, transparent 51%),
+    linear-gradient(to top, transparent 74%, var(--ds-border) 75%, transparent 76%);
+  background-size: 100% 100%;
+}
+
+.usage-bar-stack {
+  display: flex;
+  flex-direction: column-reverse;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 3px 3px 0 0;
+}
+
+.usage-bar-segment {
+  flex-basis: 0;
+  min-height: 1px;
+  background: var(--usage-model-color);
+}
+
+.usage-bar-label {
+  /* Absolutely anchored instead of text-align: when a label is wider than its
+     day column, Chrome applies safe overflow alignment and silently falls back
+     to start alignment, which pushed the last day's label past the chart edge
+     and clipped it. left/right anchoring has no such fallback. top matches the
+     label row start of the column grid (118px track + 6px gap). */
+  position: absolute;
+  top: 124px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 0;
+  color: var(--ds-text-tertiary);
+  font-size: 9px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.usage-bar-label-first {
+  left: 0;
+  transform: none;
+}
+
+.usage-bar-label-last {
+  right: 0;
+  left: auto;
+  transform: none;
+}
+
+.usage-model-layout {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.usage-donut {
+  display: grid;
+  place-items: center;
+  width: 112px;
+  height: 112px;
+  border-radius: 999px;
+}
+
+.usage-donut-hole {
+  display: grid;
+  place-items: center;
+  width: 66px;
+  height: 66px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ds-card) 90%, var(--ds-bg));
+  border: 1px solid var(--ds-border);
+}
+
+.usage-donut-hole strong {
+  color: var(--ds-text);
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.usage-donut-hole span {
+  color: var(--ds-text-tertiary);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.usage-model-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.usage-model-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.usage-model-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.usage-model-name {
+  overflow: hidden;
+  color: var(--ds-text);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-model-tokens {
+  margin-top: 2px;
+  color: var(--ds-text-tertiary);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.usage-model-share {
+  color: var(--ds-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+@container (max-width: 360px) {
+  .usage-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .usage-metric-cell:first-child {
+    grid-column: auto;
+  }
+
+  .usage-model-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .usage-donut {
+    justify-self: center;
+  }
+}
+
+/* Confirm dialog (replaces window.confirm for destructive actions) */
+.ds-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 20, 35, 0.42);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: ds-modal-fade 0.14s ease-out;
+}
+
+.ds-modal-card {
+  width: 100%;
+  max-width: 360px;
+  padding: 18px 18px 14px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--radius-ctrl);
+  background: var(--ds-card);
+  box-shadow: var(--ds-shadow-lg);
+  animation: ds-modal-pop 0.16s ease-out;
+}
+
+.ds-modal-title {
+  margin: 0;
+  color: var(--ds-text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.ds-modal-message {
+  margin: 8px 0 16px;
+  color: var(--ds-text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.ds-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@keyframes ds-modal-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes ds-modal-pop {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}

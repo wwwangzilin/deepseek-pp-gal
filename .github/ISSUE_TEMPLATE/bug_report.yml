@@ -1,0 +1,70 @@
+name: Bug report
+description: Report a reproducible bug. Screenshot evidence is required.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please keep this template intact and fill every required section. Bug reports without a screenshot are closed automatically.
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue type
+      description: This form is only for reproducible bugs.
+      options:
+        - Bug report
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the bug in one or two sentences.
+      placeholder: What is broken?
+    validations:
+      required: true
+  - type: textarea
+    id: expected-outcome
+    attributes:
+      label: Expected outcome
+      description: Describe what should happen instead.
+      placeholder: What result do you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: details-reproduction
+    attributes:
+      label: Details / reproduction
+      description: Include clear steps to reproduce the bug.
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser, extension version, OS, and any relevant settings.
+      placeholder: |
+        - Browser:
+        - Extension version:
+        - OS:
+    validations:
+      required: true
+  - type: textarea
+    id: bug-screenshot
+    attributes:
+      label: Bug screenshot
+      description: Paste or upload a screenshot that shows the bug. Bug reports without screenshot evidence are closed automatically.
+      placeholder: Drag an image here or paste a GitHub image/file URL.
+    validations:
+      required: true
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add logs, links, or other context if available.
+    validations:
+      required: false

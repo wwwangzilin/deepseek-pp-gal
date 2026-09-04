@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, height=1080">
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "PingFang SC";
+        src: local("PingFang SC");
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #f7f9ff;
+      }
+
+      body {
+        color: #101827;
+        font-family: "PingFang SC", sans-serif;
+      }
+
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #f7f9ff;
+      }
+
+      .scene {
+        position: absolute;
+        inset: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #f7f9ff;
+      }
+
+      #scene-1 {
+        z-index: 1;
+      }
+
+      #scene-2,
+      #scene-3,
+      #scene-4,
+      #scene-5,
+      #scene-6 {
+        z-index: 2;
+        opacity: 0;
+      }
+
+      .bg-grid {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(79, 108, 255, 0.12) 1px, rgba(247, 249, 255, 0) 1px),
+          linear-gradient(90deg, rgba(79, 108, 255, 0.12) 1px, rgba(247, 249, 255, 0) 1px);
+        background-size: 90px 90px;
+        mask-image: radial-gradient(circle at 72% 36%, black 0%, transparent 56%);
+        opacity: 0.9;
+      }
+
+      .halo {
+        position: absolute;
+        width: 840px;
+        height: 840px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(79, 108, 255, 0.26) 0%, rgba(79, 108, 255, 0) 66%);
+        filter: blur(2px);
+      }
+
+      .halo.one {
+        top: -260px;
+        right: -180px;
+      }
+
+      .halo.two {
+        left: -280px;
+        bottom: -360px;
+        background: radial-gradient(circle, rgba(22, 163, 74, 0.13) 0%, rgba(22, 163, 74, 0) 64%);
+      }
+
+      .grain {
+        position: absolute;
+        inset: 0;
+        opacity: 0.16;
+        background-image:
+          radial-gradient(circle at 20% 30%, rgba(16, 24, 39, 0.12) 0 1px, rgba(247, 249, 255, 0) 1px),
+          radial-gradient(circle at 80% 70%, rgba(79, 108, 255, 0.14) 0 1px, rgba(247, 249, 255, 0) 1px);
+        background-size: 26px 26px, 34px 34px;
+        pointer-events: none;
+      }
+
+      .content {
+        position: relative;
+        z-index: 5;
+        width: 100%;
+        height: 100%;
+        padding: 104px 126px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 34px;
+      }
+
+      .eyebrow {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        color: #4f6cff;
+        font-family: "PingFang SC", sans-serif;
+        font-size: 24px;
+        font-weight: 700;
+      }
+
+      .dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #16a34a;
+        box-shadow: 0 0 0 8px rgba(22, 163, 74, 0.14);
+      }
+
+      .title {
+        max-width: 980px;
+        font-family: "PingFang SC", sans-serif;
+        font-size: 90px;
+        line-height: 1.12;
+        font-weight: 900;
+        letter-spacing: 0;
+      }
+
+      .title.wide {
+        max-width: 880px;
+        font-size: 82px;
+      }
+
+      .title.small {
+        max-width: 1120px;
+        font-size: 74px;
+        line-height: 1.14;
+      }
+
+      .copy {
+        max-width: 900px;
+        color: #5f6f86;
+        font-size: 34px;
+        line-height: 1.34;
+        font-weight: 450;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+
+      .chip {
+        padding: 14px 24px;
+        border: 2px solid #bcd0ff;
+        border-radius: 999px;
+        color: #4f6cff;
+        background: rgba(255, 255, 255, 0.72);
+        font-size: 24px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .hero-frame {
+        position: absolute;
+        right: 70px;
+        top: 136px;
+        width: 720px;
+        height: 656px;
+        border-radius: 34px;
+        background: rgba(255, 255, 255, 0.84);
+        border: 1px solid rgba(79, 108, 255, 0.18);
+        box-shadow: 0 32px 90px rgba(35, 58, 130, 0.16);
+        overflow: hidden;
+      }
+
+      .hero-frame img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .hero-demo {
+        width: 100%;
+        height: 100%;
+        padding: 34px;
+        display: grid;
+        grid-template-columns: 1fr 220px;
+        grid-template-rows: 1fr 178px;
+        gap: 22px;
+        background: linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
+      }
+
+      .demo-main,
+      .demo-rail,
+      .demo-automation {
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid #dbe5ff;
+      }
+
+      .demo-main {
+        padding: 28px;
+      }
+
+      .demo-brand {
+        color: #4f6cff;
+        font-size: 24px;
+        font-weight: 850;
+      }
+
+      .demo-title {
+        margin-top: 36px;
+        color: #101827;
+        font-size: 40px;
+        line-height: 1.18;
+        font-weight: 900;
+      }
+
+      .demo-text {
+        margin-top: 18px;
+        color: #536276;
+        font-size: 20px;
+        line-height: 1.45;
+      }
+
+      .demo-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 28px;
+      }
+
+      .demo-tab {
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: #edf3ff;
+        color: #334fcd;
+        font-size: 17px;
+        font-weight: 800;
+      }
+
+      .demo-rail {
+        padding: 22px;
+      }
+
+      .demo-rail-title {
+        color: #101827;
+        font-size: 22px;
+        font-weight: 850;
+      }
+
+      .demo-tool {
+        margin-top: 16px;
+        padding: 14px;
+        border-radius: 16px;
+        background: #f4f7ff;
+        color: #536276;
+        font-size: 17px;
+        font-weight: 700;
+      }
+
+      .demo-automation {
+        grid-column: 1 / 3;
+        padding: 24px 28px;
+      }
+
+      .demo-automation-title {
+        color: #101827;
+        font-size: 25px;
+        font-weight: 850;
+      }
+
+      .demo-steps {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+        margin-top: 18px;
+      }
+
+      .demo-step {
+        padding: 16px;
+        border-radius: 18px;
+        background: #f4f7ff;
+        color: #536276;
+        font-size: 18px;
+        font-weight: 750;
+      }
+
+      .header-lockup {
+        position: absolute;
+        right: 78px;
+        bottom: 96px;
+        width: 710px;
+        border-radius: 26px;
+        box-shadow: 0 30px 80px rgba(35, 58, 130, 0.16);
+      }
+
+      .split {
+        display: grid;
+        grid-template-columns: 0.9fr 1.1fr;
+        align-items: center;
+        gap: 76px;
+      }
+
+      .text-column {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+        min-width: 0;
+      }
+
+      .browser-shell {
+        width: 940px;
+        height: 620px;
+        border-radius: 32px;
+        background: #ffffff;
+        border: 1px solid #dbe5ff;
+        box-shadow: 0 36px 100px rgba(35, 58, 130, 0.16);
+        overflow: hidden;
+      }
+
+      .browser-top {
+        height: 68px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 26px;
+        border-bottom: 1px solid #e5ecff;
+        background: #ffffff;
+      }
+
+      .traffic {
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        background: #dfe7ff;
+      }
+
+      .address {
+        margin-left: 12px;
+        padding: 12px 22px;
+        border-radius: 999px;
+        background: #f0f4ff;
+        color: #536276;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 17px;
+      }
+
+      .browser-body {
+        display: grid;
+        grid-template-columns: 1fr 320px;
+        height: calc(100% - 68px);
+      }
+
+      .chat-area {
+        padding: 44px;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+      }
+
+      .chat-line {
+        width: 78%;
+        height: 24px;
+        margin-bottom: 22px;
+        border-radius: 999px;
+        background: #e7edff;
+      }
+
+      .chat-line.short {
+        width: 54%;
+      }
+
+      .tool-result {
+        margin-top: 42px;
+        width: 86%;
+        border-radius: 24px;
+        border: 1px solid #d9e4ff;
+        background: #ffffff;
+        padding: 28px;
+        box-shadow: 0 18px 48px rgba(79, 108, 255, 0.12);
+      }
+
+      .tool-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: #101827;
+        font-size: 24px;
+        font-weight: 800;
+      }
+
+      .sidepanel {
+        border-left: 1px solid #e5ecff;
+        background: #f2f6ff;
+        padding: 28px 22px;
+      }
+
+      .side-title {
+        color: #101827;
+        font-size: 28px;
+        font-weight: 800;
+      }
+
+      .side-card {
+        margin-top: 22px;
+        padding: 18px;
+        border-radius: 20px;
+        background: #ffffff;
+        border: 1px solid #dbe5ff;
+      }
+
+      .side-card strong {
+        display: block;
+        font-size: 20px;
+        margin-bottom: 8px;
+      }
+
+      .side-card span {
+        color: #536276;
+        font-size: 17px;
+      }
+
+      .screenshot-stack {
+        position: relative;
+        width: 900px;
+        height: 790px;
+      }
+
+      .phone-shot {
+        position: absolute;
+        width: 380px;
+        height: 800px;
+        border-radius: 34px;
+        object-fit: cover;
+        border: 1px solid rgba(79, 108, 255, 0.18);
+        box-shadow: 0 36px 88px rgba(35, 58, 130, 0.18);
+        background: #ffffff;
+      }
+
+      .phone-shot.one {
+        left: 38px;
+        top: 8px;
+      }
+
+      .phone-shot.two {
+        left: 292px;
+        top: 54px;
+      }
+
+      .phone-shot.three {
+        left: 548px;
+        top: 102px;
+      }
+
+      .feature-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 22px;
+        max-width: 900px;
+      }
+
+      .feature-item {
+        padding: 24px 26px;
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.82);
+        border: 1px solid #dbe5ff;
+        box-shadow: 0 16px 48px rgba(35, 58, 130, 0.08);
+      }
+
+      .feature-item b {
+        display: block;
+        color: #101827;
+        font-size: 25px;
+        margin-bottom: 8px;
+      }
+
+      .feature-item span {
+        color: #536276;
+        font-size: 20px;
+        line-height: 1.35;
+      }
+
+      .mcp-board {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 22px;
+        width: 900px;
+      }
+
+      .mcp-card {
+        min-height: 190px;
+        padding: 28px;
+        border-radius: 26px;
+        background: #ffffff;
+        border: 1px solid #dbe5ff;
+        box-shadow: 0 22px 66px rgba(35, 58, 130, 0.12);
+      }
+
+      .mcp-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 16px;
+        border-radius: 999px;
+        background: #eafaf0;
+        color: #16803a;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .mcp-name {
+        margin-top: 26px;
+        color: #101827;
+        font-size: 31px;
+        font-weight: 850;
+      }
+
+      .mcp-meta {
+        margin-top: 12px;
+        color: #536276;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 18px;
+        line-height: 1.35;
+      }
+
+      .media-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 28px;
+        width: 900px;
+      }
+
+      .media-panel {
+        height: 330px;
+        border-radius: 32px;
+        background: #ffffff;
+        border: 1px solid #dbe5ff;
+        box-shadow: 0 24px 66px rgba(35, 58, 130, 0.12);
+        padding: 34px;
+        overflow: hidden;
+      }
+
+      .media-panel img {
+        margin-top: 22px;
+        width: 100%;
+        height: 210px;
+        border-radius: 22px;
+        object-fit: cover;
+        object-position: top;
+        border: 1px solid #e5ecff;
+      }
+
+      .panel-title {
+        color: #101827;
+        font-size: 29px;
+        font-weight: 850;
+      }
+
+      .timeline {
+        position: relative;
+        width: 860px;
+        height: 210px;
+        border-radius: 30px;
+        background: #ffffff;
+        border: 1px solid #dbe5ff;
+        box-shadow: 0 24px 66px rgba(35, 58, 130, 0.12);
+        padding: 32px;
+      }
+
+      .timeline-line {
+        position: absolute;
+        left: 70px;
+        right: 70px;
+        top: 106px;
+        height: 5px;
+        border-radius: 999px;
+        background: #dfe7ff;
+      }
+
+      .timeline-node {
+        position: absolute;
+        top: 83px;
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        background: #4f6cff;
+        box-shadow: 0 0 0 12px rgba(79, 108, 255, 0.14);
+      }
+
+      .timeline-node.n1 {
+        left: 86px;
+      }
+
+      .timeline-node.n2 {
+        left: 386px;
+        background: #16a34a;
+      }
+
+      .timeline-node.n3 {
+        left: 686px;
+        background: #f59e0b;
+      }
+
+      .timeline-label {
+        position: absolute;
+        top: 148px;
+        color: #536276;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .timeline-label.l1 {
+        left: 60px;
+      }
+
+      .timeline-label.l2 {
+        left: 344px;
+      }
+
+      .timeline-label.l3 {
+        left: 656px;
+      }
+
+      .final-lockup {
+        align-items: center;
+        text-align: center;
+        gap: 26px;
+      }
+
+      .logo-mark {
+        width: 214px;
+        height: 214px;
+        border-radius: 50px;
+        box-shadow: 0 28px 70px rgba(79, 108, 255, 0.22);
+      }
+
+      .final-title {
+        font-family: "Oswald", sans-serif;
+        font-size: 118px;
+        line-height: 1;
+        font-weight: 900;
+      }
+
+      .final-copy {
+        max-width: 920px;
+        color: #5f6f86;
+        font-size: 34px;
+        line-height: 1.35;
+      }
+
+      .cta-row {
+        display: flex;
+        gap: 18px;
+        justify-content: center;
+        margin-top: 18px;
+      }
+
+      .cta {
+        padding: 18px 28px;
+        border-radius: 999px;
+        background: #4f6cff;
+        color: #ffffff;
+        font-size: 26px;
+        font-weight: 850;
+        box-shadow: 0 20px 44px rgba(79, 108, 255, 0.24);
+      }
+
+      .cta.secondary {
+        background: #ffffff;
+        color: #4f6cff;
+        border: 2px solid #bcd0ff;
+        box-shadow: none;
+      }
+
+      .wipe {
+        position: absolute;
+        inset: 0;
+        z-index: 40;
+        transform: translateX(-1920px);
+        pointer-events: none;
+      }
+
+      #wipe-a {
+        background: #4f6cff;
+      }
+
+      #wipe-b {
+        background: #dfe7ff;
+      }
+    </style>
+  </head>
+  <body>
+    <div data-hf-id="hf-qbnw" id="root" data-composition-id="main" data-start="0" data-duration="60" data-width="1920" data-height="1080">
+      <audio data-hf-id="hf-g3dn" id="narration" data-start="0" data-duration="60" data-track-index="3" src="assets/narration.wav" data-volume="1"></audio>
+
+      <section data-hf-id="hf-k674" id="scene-1" class="scene">
+        <div data-hf-id="hf-855n" class="bg-grid" data-layout-ignore=""></div>
+        <div data-hf-id="hf-edrv" class="halo one" data-layout-ignore=""></div>
+        <div data-hf-id="hf-uj41" class="halo two" data-layout-ignore=""></div>
+        <div data-hf-id="hf-ryn8" class="grain" data-layout-ignore=""></div>
+        <div data-hf-id="hf-mcm7" class="content">
+          <div data-hf-id="hf-ino9" id="s1-eyebrow" class="eyebrow"><span data-hf-id="hf-9gry" class="dot"></span>DeepSeek 网页版，升级完成</div>
+          <h1 data-hf-id="hf-1lxe" id="s1-title" class="title wide">把 DeepSeek 变成浏览器里的智能体工作台。</h1>
+          <p data-hf-id="hf-wmut" id="s1-copy" class="copy">
+            记忆、项目、技能、MCP 工具、浏览器控制、媒体分析、对话导出和自动化，集中在同一个浏览器流程里。
+          </p>
+          <div data-hf-id="hf-e6cp" id="s1-chips" class="chips">
+            <span data-hf-id="hf-k900" class="chip">记忆</span>
+            <span data-hf-id="hf-naxh" class="chip">项目</span>
+            <span data-hf-id="hf-z4hp" class="chip">技能</span>
+            <span data-hf-id="hf-utz9" class="chip">MCP</span>
+            <span data-hf-id="hf-c8og" class="chip">自动化</span>
+          </div>
+        </div>
+        <div data-hf-id="hf-foxy" id="s1-frame" class="hero-frame" aria-label="DeepSeek++ 工作台概览">
+          <div data-hf-id="hf-p1ng" class="hero-demo">
+            <div data-hf-id="hf-yril" class="demo-main">
+              <div data-hf-id="hf-74r9" class="demo-brand">DeepSeek++</div>
+              <div data-hf-id="hf-47qk" class="demo-title">会记忆、会用工具的 DeepSeek 工作台</div>
+              <div data-hf-id="hf-xi53" class="demo-text">侧边栏统一管理长期记忆、项目上下文、技能、MCP 工具和自动化任务。</div>
+              <div data-hf-id="hf-sfye" class="demo-tabs">
+                <span data-hf-id="hf-0ft2" class="demo-tab">长期记忆</span>
+                <span data-hf-id="hf-6n43" class="demo-tab">项目上下文</span>
+                <span data-hf-id="hf-yl9m" class="demo-tab">MCP 工具</span>
+                <span data-hf-id="hf-36sm" class="demo-tab">自动化</span>
+              </div>
+            </div>
+            <div data-hf-id="hf-0ruu" class="demo-rail">
+              <div data-hf-id="hf-w7uf" class="demo-rail-title">工具</div>
+              <div data-hf-id="hf-sjo7" class="demo-tool">网页抓取</div>
+              <div data-hf-id="hf-w4is" class="demo-tool">数据分析</div>
+              <div data-hf-id="hf-b13o" class="demo-tool">浏览器操作</div>
+            </div>
+            <div data-hf-id="hf-1ue3" class="demo-automation">
+              <div data-hf-id="hf-5fsm" class="demo-automation-title">自动化</div>
+              <div data-hf-id="hf-0nuv" class="demo-steps">
+                <div data-hf-id="hf-9g01" class="demo-step">定时运行提示词</div>
+                <div data-hf-id="hf-s7dq" class="demo-step">保留执行记录</div>
+                <div data-hf-id="hf-5xv0" class="demo-step">继续回到对话</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <img data-hf-id="hf-jetd" id="s1-header" class="header-lockup" src="assets/readme-header.png" alt="DeepSeek++ 品牌标识">
+      </section>
+
+      <section data-hf-id="hf-v1or" id="scene-2" class="scene">
+        <div data-hf-id="hf-dhsr" class="bg-grid" data-layout-ignore=""></div>
+        <div data-hf-id="hf-eoe3" class="halo one" data-layout-ignore=""></div>
+        <div data-hf-id="hf-3obg" class="grain" data-layout-ignore=""></div>
+        <div data-hf-id="hf-9k1z" class="content split">
+          <div data-hf-id="hf-yeow" class="text-column">
+            <div data-hf-id="hf-2vx2" id="s2-eyebrow" class="eyebrow"><span data-hf-id="hf-zcc2" class="dot"></span>智能体式持续执行</div>
+            <h2 data-hf-id="hf-klxa" id="s2-title" class="title small">工具结果回到同一段对话。</h2>
+            <p data-hf-id="hf-hg1v" id="s2-copy" class="copy">
+              DeepSeek++ 会把多步任务继续推进：工具输出折回聊天上下文，模型基于证据继续下一步。
+            </p>
+          </div>
+          <div data-hf-id="hf-1ig5" id="s2-shell" class="browser-shell">
+            <div data-hf-id="hf-eqve" class="browser-top">
+              <span data-hf-id="hf-lp3g" class="traffic"></span>
+              <span data-hf-id="hf-bxpg" class="traffic"></span>
+              <span data-hf-id="hf-aqsd" class="traffic"></span>
+              <span data-hf-id="hf-ekvw" class="address">chat.deepseek.com</span>
+            </div>
+            <div data-hf-id="hf-nizx" class="browser-body">
+              <div data-hf-id="hf-ybjs" class="chat-area">
+                <div data-hf-id="hf-ow6p" class="chat-line"></div>
+                <div data-hf-id="hf-f04b" class="chat-line short"></div>
+                <div data-hf-id="hf-cgo4" class="tool-result">
+                  <div data-hf-id="hf-p3pv" class="tool-head"><span data-hf-id="hf-zqn3" class="dot"></span>已执行工具</div>
+                  <div data-hf-id="hf-u9qy" class="chat-line" style="margin-top: 24px; width: 70%"></div>
+                  <div data-hf-id="hf-shp7" class="chat-line short"></div>
+                </div>
+              </div>
+              <div data-hf-id="hf-la2h" class="sidepanel">
+                <div data-hf-id="hf-0ux7" class="side-title">第 3 步</div>
+                <div data-hf-id="hf-1oj4" class="side-card">
+                  <strong data-hf-id="hf-mulj">网页抓取</strong>
+                  <span data-hf-id="hf-x32z">来源已返回</span>
+                </div>
+                <div data-hf-id="hf-0tag" class="side-card">
+                  <strong data-hf-id="hf-jolc">数据分析</strong>
+                  <span data-hf-id="hf-y0ju">分析完成</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section data-hf-id="hf-r3kq" id="scene-3" class="scene">
+        <div data-hf-id="hf-d3hq" class="bg-grid" data-layout-ignore=""></div>
+        <div data-hf-id="hf-1y6t" class="halo two" data-layout-ignore=""></div>
+        <div data-hf-id="hf-2hed" class="grain" data-layout-ignore=""></div>
+        <div data-hf-id="hf-6ndz" class="content split">
+          <div data-hf-id="hf-i91o" id="s3-stack" class="screenshot-stack">
+            <img data-hf-id="hf-iflp" class="phone-shot one" src="assets/screenshot-sidepanel-memory.png" alt="记忆侧边栏">
+            <img data-hf-id="hf-wrll" class="phone-shot two" src="assets/screenshot-sidepanel-projects.png" alt="项目侧边栏">
+            <img data-hf-id="hf-q902" class="phone-shot three" src="assets/screenshot-sidepanel-skill.png" alt="技能侧边栏">
+          </div>
+          <div data-hf-id="hf-y7yw" class="text-column">
+            <div data-hf-id="hf-q5x2" id="s3-eyebrow" class="eyebrow"><span data-hf-id="hf-04y4" class="dot"></span>上下文长期可用</div>
+            <h2 data-hf-id="hf-t19p" id="s3-title" class="title small">记忆、项目和技能留在聊天旁边。</h2>
+            <div data-hf-id="hf-lmjg" id="s3-list" class="feature-list" data-layout-allow-overlap="" data-layout-allow-overflow="">
+              <div data-hf-id="hf-ra7y" class="feature-item"><b data-hf-id="hf-nqdv">长期记忆</b><span data-hf-id="hf-jto1">跨对话复用偏好、项目事实和参考资料。</span></div>
+              <div data-hf-id="hf-txsy" class="feature-item"><b data-hf-id="hf-x485">项目上下文</b><span data-hf-id="hf-xtf3">把项目指令和项目记忆注入对应 DeepSeek 会话。</span></div>
+              <div data-hf-id="hf-uc3z" class="feature-item"><b data-hf-id="hf-bcda">可复用技能</b><span data-hf-id="hf-cgdk">用专家模式和任务模板切换工作流。</span></div>
+              <div data-hf-id="hf-uqf0" class="feature-item"><b data-hf-id="hf-5v4m">保存项</b><span data-hf-id="hf-6tef">常用提示词、书签和片段随时插入。</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section data-hf-id="hf-8bv1" id="scene-4" class="scene">
+        <div data-hf-id="hf-cp6p" class="bg-grid" data-layout-ignore=""></div>
+        <div data-hf-id="hf-ea32" class="halo one" data-layout-ignore=""></div>
+        <div data-hf-id="hf-2vpe" class="grain" data-layout-ignore=""></div>
+        <div data-hf-id="hf-692y" class="content split">
+          <div data-hf-id="hf-x11t" class="text-column">
+            <div data-hf-id="hf-5200" id="s4-eyebrow" class="eyebrow"><span data-hf-id="hf-0j95" class="dot"></span>MCP 与浏览器控制</div>
+            <h2 data-hf-id="hf-o47v" id="s4-title" class="title small">连接工具。操作指定标签页。</h2>
+            <p data-hf-id="hf-c7g5" id="s4-copy" class="copy">
+              接入本地或远程 MCP 服务，管理权限模式；只有在用户选择目标后，才开放可见网页操作。
+            </p>
+          </div>
+          <div data-hf-id="hf-bdcf" id="s4-board" class="mcp-board">
+            <div data-hf-id="hf-8b87" class="mcp-card">
+              <span data-hf-id="hf-mf25" class="mcp-label"><span data-hf-id="hf-0xk6" class="dot"></span>本地</span>
+              <div data-hf-id="hf-1ma4" class="mcp-name">DeepSeek++ 本地主机</div>
+              <div data-hf-id="hf-6qix" class="mcp-meta">就绪 - 3 个工具 - 42 ms</div>
+            </div>
+            <div data-hf-id="hf-lxp3" class="mcp-card">
+              <span data-hf-id="hf-t8wg" class="mcp-label" style="background: #fff3df; color: #a85c00">远程</span>
+              <div data-hf-id="hf-g5y4" class="mcp-name">行情数据 MCP</div>
+              <div data-hf-id="hf-ab7q" class="mcp-meta">就绪 - 白名单模式</div>
+            </div>
+            <div data-hf-id="hf-lje2" class="mcp-card">
+              <span data-hf-id="hf-1kph" class="mcp-label" style="background: #eaf0ff; color: #4f6cff">浏览器</span>
+              <div data-hf-id="hf-vlsw" class="mcp-name">导航 / 点击 / 输入</div>
+              <div data-hf-id="hf-792x" class="mcp-meta">已选择目标标签页</div>
+            </div>
+            <div data-hf-id="hf-l531" class="mcp-card">
+              <span data-hf-id="hf-n8yw" class="mcp-label" style="background: #f0ebff; color: #7c3aed">Python</span>
+              <div data-hf-id="hf-pgca" class="mcp-name">Python 分析</div>
+              <div data-hf-id="hf-juz5" class="mcp-meta">已完成 - 128 行</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section data-hf-id="hf-7k78" id="scene-5" class="scene">
+        <div data-hf-id="hf-cavo" class="bg-grid" data-layout-ignore=""></div>
+        <div data-hf-id="hf-353w" class="halo two" data-layout-ignore=""></div>
+        <div data-hf-id="hf-4v8j" class="grain" data-layout-ignore=""></div>
+        <div data-hf-id="hf-5urx" class="content split">
+          <div data-hf-id="hf-xfcu" class="text-column" data-layout-allow-overflow="">
+            <div data-hf-id="hf-vmuo" id="s5-eyebrow" class="eyebrow"><span data-hf-id="hf-1bv7" class="dot"></span>不止文本聊天</div>
+            <h2 data-hf-id="hf-ohjg" id="s5-title" class="title small">媒体、导出和自动化进入同一工作流。</h2>
+            <p data-hf-id="hf-hi6r" id="s5-copy" class="copy">
+              通过已配置工具分析图片或视频，导出对话用于归档，也可以把重复任务排成定时运行并保留历史。
+            </p>
+          </div>
+          <div data-hf-id="hf-w8fr">
+            <div data-hf-id="hf-hwak" id="s5-media" class="media-grid" data-layout-allow-overlap="" data-layout-allow-overflow="">
+              <div data-hf-id="hf-d7wp" class="media-panel">
+                <div data-hf-id="hf-77bm" class="panel-title">浏览器操作</div>
+                <img data-hf-id="hf-j9ht" src="assets/screenshot-sidepanel-browser.png" alt="浏览器控制面板">
+              </div>
+              <div data-hf-id="hf-r8e5" class="media-panel">
+                <div data-hf-id="hf-8ee0" class="panel-title">定时任务</div>
+                <img data-hf-id="hf-xsc0" src="assets/screenshot-sidepanel-automation.png" alt="自动化面板">
+              </div>
+            </div>
+            <div data-hf-id="hf-900f" id="s5-timeline" class="timeline" style="margin-top: 28px">
+              <div data-hf-id="hf-ereo" class="timeline-line"></div>
+              <div data-hf-id="hf-oned" class="timeline-node n1"></div>
+              <div data-hf-id="hf-slie" class="timeline-node n2"></div>
+              <div data-hf-id="hf-wjmf" class="timeline-node n3"></div>
+              <div data-hf-id="hf-gikg" class="timeline-label l1">附加媒体</div>
+              <div data-hf-id="hf-ua0j" class="timeline-label l2">运行提示词</div>
+              <div data-hf-id="hf-74t2" class="timeline-label l3">导出结果</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section data-hf-id="hf-g833" id="scene-6" class="scene">
+        <div data-hf-id="hf-bwkn" class="bg-grid" data-layout-ignore=""></div>
+        <div data-hf-id="hf-dvs1" class="halo one" data-layout-ignore=""></div>
+        <div data-hf-id="hf-2qsv" class="halo two" data-layout-ignore=""></div>
+        <div data-hf-id="hf-59jk" class="grain" data-layout-ignore=""></div>
+        <div data-hf-id="hf-narq" class="content final-lockup">
+          <img data-hf-id="hf-7gx4" id="s6-logo" class="logo-mark" src="assets/logo.png" alt="DeepSeek++ 标识">
+          <h2 data-hf-id="hf-4vy4" id="s6-title" class="final-title">DeepSeek++</h2>
+          <p data-hf-id="hf-2lh5" id="s6-copy" class="final-copy">
+            面向 DeepSeek 网页版的开源智能体工作台。可通过 Chrome 应用商店安装，也可从源码构建。
+          </p>
+          <div data-hf-id="hf-vx09" id="s6-cta" class="cta-row">
+            <span data-hf-id="hf-hm44" class="cta">Chrome 应用商店</span>
+            <span data-hf-id="hf-p275" class="cta secondary">GitHub 源码</span>
+          </div>
+        </div>
+      </section>
+
+      <div data-hf-id="hf-x7v0" id="wipe-a" class="wipe"></div>
+      <div data-hf-id="hf-5vqv" id="wipe-b" class="wipe"></div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+      var DURATION = 60;
+      var transitions = [9.6, 19.4, 29.2, 39.2, 49.2];
+      var scenes = ["#scene-1", "#scene-2", "#scene-3", "#scene-4", "#scene-5", "#scene-6"];
+
+      gsap.set(".halo", { transformOrigin: "50% 50%" });
+      tl.to(".halo.one", { scale: 1.08, x: -26, y: 18, duration: 8, ease: "sine.inOut", repeat: 7, yoyo: true }, 0);
+      tl.to(".halo.two", { scale: 1.12, x: 28, y: -18, duration: 9, ease: "sine.inOut", repeat: 6, yoyo: true }, 0.2);
+      tl.to(".bg-grid", { x: 28, y: -18, duration: 10, ease: "sine.inOut", repeat: 5, yoyo: true }, 0);
+
+      function enterScene1() {
+        tl.from("#s1-eyebrow", { y: 26, opacity: 0, duration: 0.45, ease: "power3.out" }, 0.2);
+        tl.from("#s1-title", { y: 54, opacity: 0, duration: 0.65, ease: "expo.out" }, 0.38);
+        tl.from("#s1-copy", { x: -34, opacity: 0, duration: 0.48, ease: "power2.out" }, 0.72);
+        tl.from("#s1-chips .chip", { y: 28, opacity: 0, scale: 0.94, duration: 0.42, stagger: 0.06, ease: "back.out(1.5)" }, 0.98);
+        tl.from("#s1-frame", { x: 80, opacity: 0, scale: 0.94, duration: 0.7, ease: "power4.out" }, 0.56);
+        tl.from("#s1-header", { y: 54, opacity: 0, scale: 0.96, duration: 0.58, ease: "power2.out" }, 1.16);
+      }
+
+      function enterScene2(base) {
+        tl.from("#s2-eyebrow", { y: 28, opacity: 0, duration: 0.42, ease: "power3.out" }, base + 0.36);
+        tl.from("#s2-title", { x: -56, opacity: 0, duration: 0.6, ease: "expo.out" }, base + 0.52);
+        tl.from("#s2-copy", { y: 34, opacity: 0, duration: 0.5, ease: "power2.out" }, base + 0.84);
+        tl.from("#s2-shell", { x: 74, opacity: 0, scale: 0.96, duration: 0.72, ease: "power4.out" }, base + 0.48);
+        tl.from("#s2-shell .chat-line", { scaleX: 0, transformOrigin: "left center", opacity: 0.4, duration: 0.45, stagger: 0.12, ease: "power2.out" }, base + 1.12);
+        tl.from("#s2-shell .side-card", { x: 30, opacity: 0, duration: 0.42, stagger: 0.12, ease: "back.out(1.4)" }, base + 1.24);
+      }
+
+      function enterScene3(base) {
+        tl.from("#s3-stack .phone-shot.one", { x: -72, y: 28, opacity: 0, rotation: -4, duration: 0.64, ease: "power4.out" }, base + 0.32);
+        tl.from("#s3-stack .phone-shot.two", { y: 68, opacity: 0, scale: 0.94, duration: 0.58, ease: "expo.out" }, base + 0.5);
+        tl.from("#s3-stack .phone-shot.three", { x: 82, y: 34, opacity: 0, rotation: 3, duration: 0.64, ease: "power3.out" }, base + 0.66);
+        tl.from("#s3-eyebrow", { x: 34, opacity: 0, duration: 0.42, ease: "power2.out" }, base + 0.5);
+        tl.from("#s3-title", { y: 48, opacity: 0, duration: 0.6, ease: "expo.out" }, base + 0.72);
+        tl.from("#s3-list .feature-item", { y: 40, opacity: 0, scale: 0.97, duration: 0.46, stagger: 0.08, ease: "back.out(1.25)" }, base + 1.08);
+      }
+
+      function enterScene4(base) {
+        tl.from("#s4-eyebrow", { y: 24, opacity: 0, duration: 0.42, ease: "power3.out" }, base + 0.34);
+        tl.from("#s4-title", { x: -52, opacity: 0, duration: 0.58, ease: "expo.out" }, base + 0.52);
+        tl.from("#s4-copy", { y: 30, opacity: 0, duration: 0.48, ease: "power2.out" }, base + 0.86);
+        tl.from("#s4-board .mcp-card", { y: 46, opacity: 0, scale: 0.96, duration: 0.5, stagger: 0.09, ease: "back.out(1.35)" }, base + 0.66);
+        tl.from("#s4-board .mcp-label", { scale: 0.82, opacity: 0, duration: 0.32, stagger: 0.09, ease: "power4.out" }, base + 1.06);
+      }
+
+      function enterScene5(base) {
+        tl.from("#s5-eyebrow", { y: 24, opacity: 0, duration: 0.42, ease: "power3.out" }, base + 0.34);
+        tl.from("#s5-title", { y: 54, opacity: 0, duration: 0.62, ease: "expo.out" }, base + 0.52);
+        tl.from("#s5-copy", { x: -34, opacity: 0, duration: 0.48, ease: "power2.out" }, base + 0.88);
+        tl.from("#s5-media .media-panel", { y: 44, opacity: 0, scale: 0.96, duration: 0.5, stagger: 0.12, ease: "back.out(1.25)" }, base + 0.58);
+        tl.from("#s5-timeline", { y: 34, opacity: 0, duration: 0.52, ease: "power3.out" }, base + 1.0);
+        tl.from(".timeline-node", { scale: 0, opacity: 0, duration: 0.36, stagger: 0.14, ease: "back.out(2)" }, base + 1.22);
+      }
+
+      function enterScene6(base) {
+        tl.from("#s6-logo", { y: 48, opacity: 0, scale: 0.86, duration: 0.62, ease: "back.out(1.4)" }, base + 0.36);
+        tl.from("#s6-title", { y: 54, opacity: 0, duration: 0.62, ease: "expo.out" }, base + 0.62);
+        tl.from("#s6-copy", { y: 30, opacity: 0, duration: 0.48, ease: "power2.out" }, base + 0.96);
+        tl.from("#s6-cta .cta", { y: 26, opacity: 0, scale: 0.95, duration: 0.42, stagger: 0.1, ease: "power4.out" }, base + 1.28);
+        tl.to("#root", { opacity: 0, duration: 0.72, ease: "sine.inOut" }, DURATION - 0.85);
+      }
+
+      function blockTransition(oldScene, newScene, T) {
+        tl.set("#wipe-a", { x: -1920 }, T - 0.01);
+        tl.set("#wipe-b", { x: -1920 }, T - 0.01);
+        tl.to("#wipe-a", { x: 0, duration: 0.25, ease: "power3.inOut", overwrite: "auto" }, T);
+        tl.to("#wipe-b", { x: 0, duration: 0.25, ease: "power3.inOut", overwrite: "auto" }, T + 0.06);
+        tl.set(oldScene, { opacity: 0, x: 0, y: 0, filter: "blur(0px)", scale: 1 }, T + 0.2);
+        tl.set(newScene, { opacity: 1, x: 0, y: 0, filter: "blur(0px)", scale: 1 }, T + 0.2);
+        tl.to("#wipe-a", { x: 1920, duration: 0.25, ease: "power3.inOut", overwrite: "auto" }, T + 0.28);
+        tl.to("#wipe-b", { x: 1920, duration: 0.25, ease: "power3.inOut", overwrite: "auto" }, T + 0.34);
+      }
+
+      function blurTransition(oldScene, newScene, T) {
+        tl.to(oldScene, { filter: "blur(10px)", scale: 1.03, opacity: 0, duration: 0.5, ease: "power2.inOut", overwrite: "auto" }, T);
+        tl.fromTo(newScene, { filter: "blur(10px)", scale: 0.98, opacity: 0 }, { filter: "blur(0px)", scale: 1, opacity: 1, duration: 0.5, ease: "power2.inOut", overwrite: "auto" }, T + 0.1);
+        tl.set(oldScene, { opacity: 0, x: 0, y: 0, filter: "blur(0px)", scale: 1 }, T + 0.62);
+      }
+
+      function pushTransition(oldScene, newScene, T) {
+        tl.to(oldScene, { x: -1920, duration: 0.5, ease: "power3.inOut", overwrite: "auto" }, T);
+        tl.fromTo(newScene, { x: 1920, opacity: 1 }, { x: 0, duration: 0.5, ease: "power3.inOut", overwrite: "auto" }, T);
+        tl.set(oldScene, { opacity: 0, x: 0, y: 0, filter: "blur(0px)", scale: 1 }, T + 0.52);
+      }
+
+      enterScene1();
+      blockTransition(scenes[0], scenes[1], transitions[0]);
+      enterScene2(transitions[0]);
+      pushTransition(scenes[1], scenes[2], transitions[1]);
+      enterScene3(transitions[1]);
+      blurTransition(scenes[2], scenes[3], transitions[2]);
+      enterScene4(transitions[2]);
+      pushTransition(scenes[3], scenes[4], transitions[3]);
+      enterScene5(transitions[3]);
+      blurTransition(scenes[4], scenes[5], transitions[4]);
+      enterScene6(transitions[4]);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

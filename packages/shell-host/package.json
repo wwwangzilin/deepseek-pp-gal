@@ -1,0 +1,23 @@
+{
+  "name": "deepseek-pp-shell-host",
+  "version": "1.14.0",
+  "description": "Native Messaging Shell MCP host installer for DeepSeek++",
+  "type": "module",
+  "private": false,
+  "license": "Apache-2.0",
+  "bin": {
+    "deepseek-pp-shell-host": "bin/deepseek-pp-shell-host.mjs"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "native/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
