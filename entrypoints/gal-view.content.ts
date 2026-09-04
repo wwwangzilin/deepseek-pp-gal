@@ -199,6 +199,42 @@ function buildCharacterSystemPrompt(char) {
 }
 
 /** 把激活角色同步为 deepseek-pp 的激活预设 */
+// ── 提示词注入设置（deepseek-pp prompt_injection_settings）────────
+const PRESET_CADENCE_KEY = 'gal:preset-every-message'
+
+function getGalCadencePref(): boolean {
+  return localStorage.getItem(PRESET_CADENCE_KEY) !== '0'
+}
+function setGalCadencePref(on: boolean) {
+  try { localStorage.setItem(PRESET_CADENCE_KEY, on ? '1' : '0') } catch { /* ignore */ }
+}
+
+/** 写 deepseek-pp 的 prompt 注入 cadence（every_message = 每条消息都注入角色提示词） */
+function applyPresetCadence(everyMessage: boolean) {
+  setGalCadencePref(everyMessage)
+  try {
+    chrome.runtime.sendMessage({
+      type: 'GET_PROMPT_INJECTION_SETTINGS',
+    }, (settings) => {
+      if (chrome.runtime.lastError || !settings || typeof settings !== 'object') return
+      const next = { ...settings, presetCadence: everyMessage ? 'every_message' : 'first_message' }
+      chrome.runtime.sendMessage({ type: 'SAVE_PROMPT_INJECTION_SETTINGS', payload: next }, () => {})
+    })
+  } catch { /* ignore */ }
+}
+
+/** 初始化：读取当前 cadence 到本地偏好；若从未设置过则默认开（角色扮演需每轮在场） */
+function initPresetCadence() {
+  if (localStorage.getItem(PRESET_CADENCE_KEY) !== null) return
+  try {
+    chrome.runtime.sendMessage({ type: 'GET_PROMPT_INJECTION_SETTINGS' }, (settings) => {
+      if (chrome.runtime.lastError || !settings || typeof settings !== 'object') return
+      const every = settings.presetCadence === 'every_message'
+      setGalCadencePref(every)
+    })
+  } catch { /* ignore */ }
+}
+
 function syncActiveCharacterToPreset() {
   const char = getActiveCharacter()
   if (!char) return
@@ -210,7 +246,10 @@ function syncActiveCharacterToPreset() {
       payload: { id: presetId, name: '🎭 ' + char.name + '（GAL 角色）', content, createdAt: Date.now(), updatedAt: Date.now() },
     }, () => {
       if (chrome.runtime.lastError) return
-      chrome.runtime.sendMessage({ type: 'SET_ACTIVE_PRESET', payload: { id: presetId } }, () => {})
+      chrome.runtime.sendMessage({ type: 'SET_ACTIVE_PRESET', payload: { id: presetId } }, () => {
+        // 确保角色卡按用户偏好注入：默认每条消息注入（角色始终在场）
+        applyPresetCadence(getGalCadencePref())
+      })
     })
   } catch { /* ignore */ }
 }
@@ -325,6 +364,15 @@ const GAL_CSS = `
 .g-card { background:rgba(16,20,38,.9); border:1px solid rgba(255,255,255,.1); border-radius:6px; padding:10px 12px; margin-bottom:8px; cursor:pointer; }
 .g-card.is-active { border-color:#8f7bff; background:rgba(143,123,255,.14); }
 .g-card-name { font-size:13px; font-weight:600; }
+.g-cadence-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; margin-bottom:10px; background:rgba(143,123,255,.08); border:1px solid rgba(143,123,255,.35); border-radius:6px; }
+.g-cadence-title { font-size:12px; font-weight:600; color:#e6e9f4; }
+.g-cadence-hint { font-size:10px; color:#98a1c2; margin-top:2px; }
+.g-switch { position:relative; display:inline-block; width:36px; height:20px; flex:none; }
+.g-switch input { opacity:0; width:0; height:0; }
+.g-switch-slider { position:absolute; inset:0; background:rgba(255,255,255,.15); border-radius:20px; cursor:pointer; transition:background .2s ease; }
+.g-switch-slider::before { content:''; position:absolute; width:16px; height:16px; left:2px; top:2px; background:#fff; border-radius:50%; transition:transform .2s ease; }
+.g-switch input:checked + .g-switch-slider { background:linear-gradient(135deg,#8f7bff,#4f8cff); }
+.g-switch input:checked + .g-switch-slider::before { transform:translateX(16px); }
 .g-card-desc { font-size:11px; color:#98a1c2; margin-top:2px; }
 .g-btn-row { display:flex; gap:6px; margin-top:8px; }
 .g-tool-note { position:fixed; left:50%; bottom:104px; transform:translateX(-50%); z-index:95; max-width:420px; padding:8px 16px; border:1px solid rgba(143,123,255,.5); border-radius:6px; background:rgba(13,16,32,.94); font-size:12px; }
@@ -664,9 +712,20 @@ class GalStage {
   renderCharsPanel(panel) {
     const chars = getCharacters()
     const active = getActiveCharacter()
+    const everyMessage = getGalCadencePref()
     panel.innerHTML = `
       <div class="g-panel-head"><span>角色卡</span><button class="g-btn" data-close="1">关闭</button></div>
       <div class="g-panel-body">
+        <div class="g-cadence-row" title="开启后，每次发送消息都会注入角色提示词（角色始终在场）；关闭则仅首条消息注入">
+          <div class="g-cadence-info">
+            <div class="g-cadence-title">每条消息都注入角色提示词</div>
+            <div class="g-cadence-hint">开启：每轮对话角色设定都生效</div>
+          </div>
+          <label class="g-switch">
+            <input type="checkbox" data-act="cadence" ${everyMessage ? 'checked' : ''}>
+            <span class="g-switch-slider"></span>
+          </label>
+        </div>
         ${chars.map((c) => `
           <div class="g-card ${c.id === active.id ? 'is-active' : ''}" data-id="${c.id}">
             <div class="g-card-name" style="color:${c.color || '#fff'}">${escapeHtml(c.name)} ${c.id === active.id ? '✓' : ''}</div>
@@ -683,6 +742,10 @@ class GalStage {
         </div>
       </div>`
     panel.querySelector('[data-close]').addEventListener('click', () => this.closePanel())
+    panel.querySelector('[data-act="cadence"]').addEventListener('change', (e) => {
+      applyPresetCadence(e.target.checked)
+      this.showToolNote(e.target.checked ? '✅ 每条消息都注入角色提示词（角色始终在场）' : '角色提示词仅首条消息注入')
+    })
     panel.querySelector('[data-act="new"]').addEventListener('click', () => {
       const c = { ...defaultCharacter(), id: makeId('char'), name: '新角色' }
       saveCharacter(c)
@@ -768,6 +831,7 @@ class GalStage {
       host.id = 'dsgpp-gal-root'
       document.documentElement.appendChild(host)
       const shadow = host.attachShadow({ mode: 'open' })
+      initPresetCadence()
       window.__galStage = new GalStage(shadow)
       if (typeof ResizeObserver !== 'undefined') {
         new ResizeObserver(() => window.__galStage && window.__galStage.measure()).observe(document.body)
