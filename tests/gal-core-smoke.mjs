@@ -113,5 +113,31 @@ console.log('== 雪璃预设 ==')
   }
 }
 
+console.log('== RP 意图识别与角色名提取 ==')
+{
+  const m1 = src.match(/function detectRoleplayIntent[\s\S]*?\n}/)
+  const m2 = src.match(/function extractRoleName[\s\S]*?\n}/)
+  const m3 = src.match(/const RP_STRONG_HINTS = \[[^\]]*\]/)
+  const m4 = src.match(/const RP_WEAK_HINTS = \[[^\]]*\]/)
+  assert(m1 && m2 && m3 && m4, 'RP 函数与提示词表存在')
+  if (m1 && m2 && m3 && m4) {
+    const mod = new Function(m3[0] + '\n' + m4[0] + '\n' + m1[0] + '\n' + m2[0] + '\nreturn {detectRoleplayIntent,extractRoleName}')()
+    // 强提示
+    assert(mod.detectRoleplayIntent('我们来扮演勇者和魔王吧，我是勇者') === true, '强提示「扮演」命中')
+    assert(mod.detectRoleplayIntent('现在开始扮演一个猫娘，你叫雪璃') === true, '强提示「开始扮演」命中')
+    assert(mod.detectRoleplayIntent('请帮我写一个 RP 开场') === true, 'rp 命中')
+    // 弱提示长文本（设定型）命中
+    assert(mod.detectRoleplayIntent('你是一个来自月球的傲娇公主，请用高傲语气和我对话') === true, '弱提示长设定命中')
+    // 普通问句不误判
+    assert(mod.detectRoleplayIntent('你是谁') === false, '短问句不误判')
+    assert(mod.detectRoleplayIntent('你是做什么工作的？') === false, '普通问句不误判')
+    assert(mod.detectRoleplayIntent('今天天气怎么样') === false, '闲聊不误判')
+    // 角色名提取
+    assert(mod.extractRoleName('你扮演雪璃') === '雪璃', '提取「你扮演X」')
+    assert(mod.extractRoleName('来当一只叫小咪的猫') === '小咪', '提取「叫X」')
+    assert(mod.extractRoleName('请扮演一个黑暗骑士，冷酷无情') === '黑暗骑士', '提取黑暗骑士')
+  }
+}
+
 console.log(`\n结果：${passed} 通过，${failed} 失败`)
 process.exit(failed > 0 ? 1 : 0)
