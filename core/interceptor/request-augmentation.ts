@@ -13,7 +13,7 @@ import { absolutizeSkillReferences, joinUnderRoot } from '../skill/local-path-re
 import { DEFAULT_SKILL_AUTO_ACTIVATION_SETTINGS, type SkillAutoActivationSettings } from '../skill/auto-activation-settings';
 import { projectToolDescriptorsForNativeSearch, filterRetiredModelFacingTools } from '../tool';
 import type { Memory, ModelType, Skill, SystemPromptPreset, ToolDescriptor } from '../types';
-import { filterMemoriesByProjectScope } from '../memory/scope';
+import { filterMemoriesForInjection } from '../memory/scope';
 import {
   normalizeDeepSeekMessageId,
   type DeepSeekAugmentableWebRoute,
@@ -233,7 +233,11 @@ export function augmentDecodedRequestBody(
   }
 
   if (resolved) {
-    const scopedMemories = filterMemoriesByProjectScope(state.memories, state.projectId);
+    const scopedMemories = filterMemoriesForInjection(
+      state.memories,
+      state.projectId,
+      state.activePreset?.characterId ?? null,
+    );
     const isLocalIndexActivated = activeLocalSkillDir !== undefined;
 
     let augmented: string;
@@ -288,7 +292,11 @@ export function augmentDecodedRequestBody(
   }
 
   const { augmented, usedMemoryIds } = buildPromptAugmentation(originalPrompt, {
-    memories: filterMemoriesByProjectScope(state.memories, state.projectId),
+    memories: filterMemoriesForInjection(
+      state.memories,
+      state.projectId,
+      state.activePreset?.characterId ?? null,
+    ),
     thinkingEnabled,
     presetContent,
     projectContext: state.projectContext,

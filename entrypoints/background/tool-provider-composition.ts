@@ -58,10 +58,11 @@ import {
   type ToolProviderExecutionContext,
 } from '../../core/tool/provider-registry';
 import type { ToolCall, ToolDescriptor, ToolResult } from '../../core/tool/types';
+import { attributeMemoryToActiveCharacter } from './character-attribution';
 
 const memoryRuntime: MemoryToolRuntime = {
   async saveMemory(input: NewMemory) {
-    const id = await saveMemory(input);
+    const id = await saveMemory(await attributeMemoryToActiveCharacter(input));
     return { id };
   },
   async getMemoryById(id: number) {

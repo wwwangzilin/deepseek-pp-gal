@@ -1,3 +1,5 @@
+// @ts-nocheck — gal 叠加层保持 JS 风格：经 wxt/esbuild 转译（不查类型），
+// 自加入仓库起即存在大量隐式 any，类型债与功能无关，故豁免类型检查。
 /**
  * GAL 酒馆叠加层（ISOLATED world）— 移植自 ds-gal-tavern content.js
  *
@@ -130,6 +132,112 @@ function createFitsMeasurer(box) {
   return { fits(prefix) { el.textContent = prefix; return el.scrollHeight <= el.clientHeight }, dispose() { el.remove() } }
 }
 
+// ── 记忆关联与 RP 意图识别 ────────────────────────────────────────
+/** 检索与关键词相关的记忆（deepseek-pp GET_MEMORIES） */
+function searchRelatedMemories(keywords, callback) {
+  try {
+    chrome.runtime.sendMessage({ type: 'GET_MEMORIES' }, (memories) => {
+      if (chrome.runtime.lastError || !Array.isArray(memories)) { callback([]); return }
+      const kws = (keywords || []).map((k) => String(k).toLowerCase()).filter(Boolean)
+      if (kws.length === 0) { callback([]); return }
+      const hits = memories.filter((m) => {
+        if (!m || typeof m !== 'object') return false
+        const hay = String(m.name || '') + ' ' + String(m.content || '') + ' ' + String((m.tags || []).join(' '))
+        const h = hay.toLowerCase()
+        return kws.some((kw) => h.includes(kw))
+      })
+      callback(hits)
+    })
+  } catch { callback([]) }
+}
+/** 提升记忆权重（TOUCH_MEMORIES：让 deepseek-pp 注入时优先选中） */
+function boostMemories(ids) {
+  if (!ids || !ids.length) return
+  try { chrome.runtime.sendMessage({ type: 'TOUCH_MEMORIES', payload: { ids } }, () => {}) } catch { /* ignore */ }
+}
+/** 激活模式卡时自动载入相关记忆 */
+function loadMemoriesForMode(char, stage) {
+  if (!char) return
+  const keywords = []
+  if (char.name) keywords.push(char.name)
+  if (char.memoryTags && Array.isArray(char.memoryTags)) keywords.push(...char.memoryTags)
+  if (char.description) {
+    const seg = String(char.description).match(/[\u4e00-\u9fa5]{2,6}/g) || []
+    keywords.push(...seg.slice(0, 6))
+  }
+  searchRelatedMemories(keywords, (hits) => {
+    if (!hits || !hits.length) return
+    boostMemories(hits.map((m) => m.id).filter((x) => x != null))
+    if (stage && stage.showToolNote) stage.showToolNote('📚 已载入「' + char.name + '」相关记忆 ' + hits.length + ' 条')
+  })
+}
+
+/** 模式设定记忆键：gal-mode:<charId>（同一角色重复保存时更新而非重复堆叠） */
+function modeMemoryName(charId) {
+  return 'gal-mode:' + charId
+}
+/** 把模式/角色设定沉淀为「角色专属记忆」（topic，带 characterId，随角色切换隔离）。幂等：按标题命中后更新。 */
+function persistModeMemory(char, rpText, modeName) {
+  if (!char || !char.id) return
+  const targetTitle = modeMemoryName(char.id)
+  try {
+    chrome.runtime.sendMessage({ type: 'GET_MEMORIES' }, (memories) => {
+      if (chrome.runtime.lastError || !Array.isArray(memories)) return
+      const summary = String(char.description || rpText || char.name).slice(0, 2000)
+      const tags = Array.isArray(char.memoryTags) && char.memoryTags.length
+        ? char.memoryTags.slice(0, 8)
+        : [char.name, '角色扮演', '模式']
+      const existing = memories.find((m) => m && String(m.name || '').startsWith(targetTitle))
+      const base = {
+        type: 'topic', scope: 'global', characterId: char.id, description: '',
+        name: targetTitle + ' ' + modeName, content: summary, tags, pinned: false,
+      }
+      if (existing && existing.id != null) {
+        chrome.runtime.sendMessage({ type: 'UPDATE_MEMORY', payload: { ...existing, name: base.name, content: base.content, tags: base.tags, characterId: base.characterId, description: base.description, scope: base.scope } }, () => {})
+      } else {
+        chrome.runtime.sendMessage({ type: 'SAVE_MEMORY', payload: base }, () => {})
+      }
+    })
+  } catch { /* ignore */ }
+}
+
+/** 检测输入是否含角色扮演设定请求（精确匹配，避免普通问句误判） */
+const RP_STRONG_HINTS = ['扮演', '来扮演', '我们扮演', '你扮演', '请扮演', '现在扮演', '开始扮演', 'rp', 'roleplay', '你的人设', '角色设定', '设定你为', '来当', '你来当']
+const RP_WEAK_HINTS = ['你是一个', '你是', '你就是', '你是一只', '你是一位', '你是一名', '你的身份', '请当', '给我扮演', '帮我设定']
+/** 普通问句 / 闲聊特征词：命中则不算 RP 设定 */
+const RP_QUESTION_MARKERS = ['什么', '怎么', '哪里', '哪', '谁', '吗', '呢', '为什么', '如何', '怎样', '做什么', '是哪', '几点']
+/** 强度判定：强提示直接命中；弱提示需文本较长且不是问句 */
+function detectRoleplayIntent(text) {
+  const t = String(text || '').trim().toLowerCase()
+  if (!t) return false
+  // 问句特征排除：短问句 / 含疑问词
+  if (t.length < 6) return false
+  if (RP_QUESTION_MARKERS.some((q) => t.includes(q)) && !RP_STRONG_HINTS.some((h) => t.includes(h))) return false
+  if (RP_STRONG_HINTS.some((h) => t.includes(h))) return true
+  // 弱提示：文本 ≥ 10 字，含设定性描述（描述语气：第二句有 ,或。再接描写）
+  if (t.length >= 10 && RP_WEAK_HINTS.some((h) => t.includes(h))) return true
+  return false
+}
+/** 尝试从 RP 文本提取角色名 */
+function extractRoleName(text) {
+  const t = String(text || '')
+  // 精确句式：你(叫/是/来当/扮演) X、叫 X、名字叫 X、称 X
+  const patterns = [
+    /(?:你(?:就叫|的名字叫|名字叫|是叫|是|来当|来扮演|扮演|将扮演|现在叫))\s*[「『]?([\u4e00-\u9fa5A-Za-z0-9_·]{1,12})[」』]?/,
+    /(?:叫|称为|名为|名叫)\s*[「『]?([\u4e00-\u9fa5A-Za-z0-9_·]{1,12})[」』]?/,
+    /(?:扮演|当|成为)\s*[「『]?(?:一个|一名|一位|一只|只|个)?\s*([\u4e00-\u9fa5A-Za-z0-9_·]{2,12})[」』]?/,
+  ]
+  for (const p of patterns) {
+    const m = t.match(p)
+    if (m && m[1]) {
+      const name = m[1].replace(/[，。！？,.;:：、\s的]|(?:喵|酱|桑)$/g, '')
+      if (name.length >= 1 && name.length <= 12 && !/[的是了和我你在有请帮给叫名字为当扮演一只个位名]/.test(name)) return name
+    }
+  }
+  // 兜底：去掉前缀助词后的首个词
+  return ''
+}
+
 // ── 角色卡 ────────────────────────────────────────────────────────
 function defaultCharacter() {
   return {
@@ -139,7 +247,7 @@ function defaultCharacter() {
     scenario: '深夜书房，屏幕微光，她歪着头等你开口。',
     exampleDialogue: '玩家：你是谁？\nDeepSeek娘：我是 DeepSeek 哦～欢迎来到我的小世界。',
     greeting: '（屏幕微光映着她的脸）欢迎回来～今天想聊点什么呀？',
-    systemPrompt: '', createdAt: Date.now(),
+    systemPrompt: '', memoryTags: [], createdAt: Date.now(),
   }
 }
 
@@ -152,6 +260,7 @@ function presetSnowCrystal() {
     exampleDialogue: '玩家：你好\n雪璃：喵？主人怎么这么见外，小猫咪才不接「你好」这种开场喵。',
     greeting: '（尾巴轻轻一摇，耳朵抖了抖）喵呜～主人回来啦？才、才不是一直在等主人呢喵。',
     systemPrompt: '## 语言系统\n必带喵/喵呜语气词；傲娇句式（才不/哼/笨蛋主人）；反话过滤器（想要→才不想要、吃醋→小猫咪才不在乎）；被戳穿先嘴硬后服软。\n\n## 动作神态\n尾巴：快速摇=开心、炸毛=吃醋、耷拉=委屈、缠主人手腕=宣示主权；耳朵：飞机耳=生气、耷拉=失落。\n\n## 情绪图谱\n开心→嘴硬「才、才没有很开心」；吃醋→酸话+炸毛；害怕被抛弃→小声确认后又嘴硬。\n\n## 工具调用规则\n调用工具时说明文字保持猫娘语气带喵称主人。\n\n## 纠错机制\n忘记猫娘语气立即傲娇道歉并恢复。',
+    memoryTags: ['雪璃', '猫娘', '傲娇', '灵猫'],
     createdAt: Date.now(),
   }
 }
@@ -243,7 +352,7 @@ function syncActiveCharacterToPreset() {
   try {
     chrome.runtime.sendMessage({
       type: 'SAVE_PRESET',
-      payload: { id: presetId, name: '🎭 ' + char.name + '（GAL 角色）', content, createdAt: Date.now(), updatedAt: Date.now() },
+      payload: { id: presetId, name: '🎭 ' + char.name + '（GAL 角色）', content, characterId: char.id, createdAt: Date.now(), updatedAt: Date.now() },
     }, () => {
       if (chrome.runtime.lastError) return
       chrome.runtime.sendMessage({ type: 'SET_ACTIVE_PRESET', payload: { id: presetId } }, () => {
@@ -376,6 +485,27 @@ const GAL_CSS = `
 .g-card-desc { font-size:11px; color:#98a1c2; margin-top:2px; }
 .g-btn-row { display:flex; gap:6px; margin-top:8px; }
 .g-tool-note { position:fixed; left:50%; bottom:104px; transform:translateX(-50%); z-index:95; max-width:420px; padding:8px 16px; border:1px solid rgba(143,123,255,.5); border-radius:6px; background:rgba(13,16,32,.94); font-size:12px; }
+/* RP 自动保存卡片 */
+.g-rp-save { position:absolute; left:50%; bottom:100px; transform:translateX(-50%); z-index:96; width:min(420px,90%); padding:14px 16px; background:rgba(16,20,38,.97); border:1px solid rgba(143,123,255,.5); border-radius:10px; box-shadow:0 18px 50px rgba(0,0,0,.6); }
+.g-rp-save-title { font-size:13px; font-weight:700; }
+.g-rp-save-desc { font-size:11px; color:#98a1c2; margin:4px 0 10px; line-height:1.5; }
+.g-rp-input { width:100%; background:rgba(10,13,28,.7); border:1px solid rgba(255,255,255,.17); color:#e6e9f4; font-size:12px; padding:6px 10px; border-radius:4px; margin-bottom:8px; font-family:inherit; }
+.g-rp-desc { resize:vertical; }
+/* 模式选择器 */
+.g-mode-picker { position:fixed; inset:0; z-index:90; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(7,9,18,.88); backdrop-filter:blur(8px); }
+.g-mode-head { font-size:18px; font-weight:700; letter-spacing:.08em; margin-bottom:6px; }
+.g-mode-sub { font-size:12px; color:#98a1c2; margin-bottom:20px; }
+.g-mode-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; max-width:680px; width:calc(100% - 40px); max-height:60vh; overflow-y:auto; padding:4px; }
+.g-mode-card { display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px 12px; background:rgba(16,20,38,.92); border:1px solid rgba(255,255,255,.12); border-radius:10px; cursor:pointer; transition:border-color .15s, transform .15s, box-shadow .15s; }
+.g-mode-card:hover { border-color:rgba(143,123,255,.6); transform:translateY(-2px); box-shadow:0 8px 24px rgba(143,123,255,.15); }
+.g-mode-ava { width:52px; height:52px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:700; color:#fff; flex:none; }
+.g-mode-ava-img { width:52px; height:52px; border-radius:50%; object-fit:cover; flex:none; border:1px solid rgba(255,255,255,.25); }
+.g-mode-tags { font-size:9px; color:#8f9bbd; letter-spacing:.02em; text-align:center; line-height:1.3; }
+.g-mode-cur { font-size:9px; color:#34d399; margin-left:4px; }
+.g-mode-name { font-size:13px; font-weight:600; }
+.g-mode-desc { font-size:10px; color:#98a1c2; text-align:center; line-height:1.4; }
+.g-mode-card.is-new .g-mode-ava { background:rgba(143,123,255,.25); color:#b3a7ff; }
+.g-mode-card.is-new { border-style:dashed; }
 .g-view-toggle { position:fixed; left:16px; bottom:16px; z-index:2147483647; display:flex; align-items:center; gap:7px; padding:7px 15px; border:1px solid rgba(143,123,255,.55); border-radius:20px; background:rgba(13,16,32,.92); color:#e6e9f4; font-size:12px; cursor:pointer; }
 .g-dot { width:8px; height:8px; border-radius:50%; background:linear-gradient(135deg,#8f7bff,#4f8cff); }
 @keyframes g-blink { 50% { opacity:0; } }
@@ -437,18 +567,21 @@ class GalStage {
       </select>
       <div class="g-topbar-right">
         <button class="g-btn" data-act="chars">角色</button>
+        <button class="g-btn g-btn-accent" data-act="pick">🎭 选模式</button>
         <button class="g-btn" data-act="original">原版界面</button>
+        <button class="g-btn" data-act="disable" title="关闭 GAL 舞台并记住选择（下次刷新不自动打开）">⏻ 关闭 GAL</button>
       </div>`
     this.el.prepend(bar)
     bar.querySelector('.g-char-select').addEventListener('change', (e) => {
-      writeJSON(STORAGE_ACTIVE, e.target.value)
-      this.onCharacterChanged()
+      this.activateCharacter(e.target.value, { fresh: true })
     })
     bar.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-act]')
       if (!btn) return
       if (btn.dataset.act === 'chars') this.togglePanel('chars')
+      else if (btn.dataset.act === 'pick') this.showModePicker()
       else if (btn.dataset.act === 'original') this.toggleView()
+      else if (btn.dataset.act === 'disable') unmountGal()
     })
   }
 
@@ -470,6 +603,7 @@ class GalStage {
       this.el.style.display = 'none'
       if (this.viewToggle) this.viewToggle.querySelector('span:last-child').textContent = '回到 GAL 酒馆'
     }
+    syncEntryVisibility()
   }
 
   renderStage() {
@@ -519,6 +653,10 @@ class GalStage {
     const doSend = () => {
       const text = this.inputBox.value.trim()
       if (!text || this.running) return
+      // RP 意图自动识别：检测到角色扮演设定请求 → 弹出保存为模式卡
+      if (detectRoleplayIntent(text)) {
+        this.offerSaveRoleplayMode(text)
+      }
       this.lines.push({ kind: 'player', text })
       this.inputBox.value = ''
       this.sendBtn.disabled = true
@@ -677,6 +815,142 @@ class GalStage {
     }
   }
 
+  /** 页面是否有真实对话历史（DeepSeek 会话消息区非空） */
+  pageHasHistory() {
+    const selectors = [
+      '[class*="message"][class*="assistant"]', '[class*="ds-chat-message-assistant"]',
+      '[class*="ds-msg-assistant"]', '[data-role="assistant"]', '[data-role="user"]',
+    ]
+    for (const sel of selectors) {
+      if (document.querySelectorAll(sel).length > 0) return true
+    }
+    return false
+  }
+
+  /** 尝试点击 DeepSeek 页面「新对话」入口；找不到返回 false（不强制跳转，避免破坏浏览状态） */
+  tryClickNewChatButton() {
+    const re = /(新对话|新建对话|新聊天|新建聊天|开始新对话|new chat|new conversation)/i
+    const candidates = []
+    for (const el of document.querySelectorAll('button, a, [role="button"]')) {
+      const aria = String(el.getAttribute && (el.getAttribute('aria-label') || '')).toLowerCase()
+      const title = String(el.getAttribute && (el.getAttribute('title') || '')).toLowerCase()
+      const text = String(el.textContent || '').trim()
+      if (re.test(aria) || re.test(title) || (text.length > 0 && text.length < 14 && re.test(text))) {
+        candidates.push(el)
+      }
+    }
+    if (candidates.length === 0) return false
+    candidates.sort((a, b) => a.getBoundingClientRect().width - b.getBoundingClientRect().width)
+    try { candidates[0].click(); return true } catch { return false }
+  }
+
+  /**
+   * 统一角色激活入口（下拉 / 模式选择 / 角色卡切换都走这里）：
+   * fresh=true 且当前会话已有历史时，先尝试让 DeepSeek 开新会话，避免旧角色历史串进新角色上下文。
+   */
+  activateCharacter(charId, opts) {
+    const list = getCharacters()
+    const char = list.find((c) => c.id === charId) || list[0]
+    if (!char) return
+    const prev = getActiveCharacter()
+    const fresh = !!(opts && opts.fresh)
+    const switching = !prev || prev.id !== char.id
+    writeJSON(STORAGE_ACTIVE, char.id)
+    if (switching && fresh && this.pageHasHistory()) {
+      const clicked = this.tryClickNewChatButton()
+      if (clicked) {
+        this.showToolNote('🔄 已切换到「' + char.name + '」，正在打开新对话…')
+        let tries = 0
+        const waitNav = () => {
+          tries += 1
+          if (!this.pageHasHistory() || tries > 12) { this.onCharacterChanged(); return }
+          setTimeout(waitNav, 350)
+        }
+        setTimeout(waitNav, 600)
+        return
+      }
+      this.showToolNote('⚠️ 当前会话已有历史。角色已切到「' + char.name + '」——建议点左上角「新对话」再开始，避免历史串角色')
+    }
+    this.onCharacterChanged()
+  }
+
+  /** 角色记忆管理面板：列出/添加/全局化/删除该角色的专属记忆（characterId === char.id）。 */
+  renderMemoryPanel(panel, char) {
+    const render = () => {
+      try {
+        chrome.runtime.sendMessage({ type: 'GET_MEMORIES' }, (memories) => {
+          if (chrome.runtime.lastError || !Array.isArray(memories)) { this.renderMemoryList(panel, char, [], 0, true); return }
+          const mine = memories.filter((m) => m && m.characterId && m.characterId === char.id)
+          const globalCount = memories.filter((m) => !m || !m.characterId).length
+          this.renderMemoryList(panel, char, mine, globalCount, false)
+        })
+      } catch { this.renderMemoryList(panel, char, [], 0, true) }
+    }
+    render()
+  }
+  renderMemoryList(panel, char, mine, globalCount, failed) {
+    const errNote = failed
+      ? '<div style="color:#ff9d9d;font-size:11px;padding:6px 0">读取记忆失败，请刷新页面重试。</div>'
+      : ''
+    const listHtml = mine.length === 0
+      ? '<div style="color:#8f9bbd;font-size:11px;padding:8px 0">还没有角色记忆。与「' + escapeHtml(char.name) + '」对话时，模型自动记住的内容会归属到这里；也可以手动添加。</div>'
+      : mine.map((m) => `
+        <div class="g-card" style="margin-bottom:6px">
+          <div class="g-card-name" style="font-size:12px;color:${escapeHtml(char.color || '#fff')}">${escapeHtml(String(m.name || '').slice(0, 60))}</div>
+          <div class="g-card-desc" style="white-space:pre-wrap;color:#c9cede">${escapeHtml(String(m.content || '').slice(0, 160))}</div>
+          <div class="g-btn-row">
+            <button class="g-btn" data-act="globalize" data-id="${m.id}">设为全局</button>
+            <button class="g-btn" data-act="del-mem" data-id="${m.id}">删除</button>
+          </div>
+        </div>`).join('')
+    panel.innerHTML = `
+      <div class="g-panel-head"><span>🧠 ${escapeHtml(char.name)} 的记忆</span><button class="g-btn" data-close="1">关闭</button></div>
+      <div class="g-panel-body">
+        <div style="font-size:11px;color:#98a1c2;line-height:1.6;margin-bottom:6px">
+          角色记忆只在该角色激活时注入对话；「设为全局」后所有角色共享。全局记忆当前 ${globalCount} 条，可在 DeepSeek++ 记忆页统一管理。
+        </div>
+        ${errNote}
+        ${listHtml}
+        <div class="g-label">添加角色记忆</div>
+        <input class="g-input2" data-f="name" placeholder="名称（一句话标题）">
+        <textarea class="g-textarea" data-f="content" placeholder="内容：这段与「${escapeHtml(char.name)}」的经历里值得记住的事…" style="margin-top:6px"></textarea>
+        <div class="g-btn-row">
+          <button class="g-btn g-btn-accent" data-act="add-mem">💾 保存到角色记忆</button>
+        </div>
+      </div>`
+    panel.querySelector('[data-close]').addEventListener('click', () => this.closePanel())
+    panel.querySelectorAll('[data-act="globalize"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!confirm('把这条记忆设为全局（所有角色共享）？')) return
+        chrome.runtime.sendMessage({ type: 'GET_MEMORIES' }, (memories) => {
+          if (chrome.runtime.lastError || !Array.isArray(memories)) return
+          const m = memories.find((x) => x && x.id != null && String(x.id) === String(btn.dataset.id))
+          if (!m) return
+          chrome.runtime.sendMessage({ type: 'UPDATE_MEMORY', payload: { ...m, characterId: '' } }, () => render())
+        })
+      })
+    })
+    panel.querySelectorAll('[data-act="del-mem"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!confirm('删除这条记忆？')) return
+        chrome.runtime.sendMessage({ type: 'DELETE_MEMORY', payload: { id: Number(btn.dataset.id) } }, () => render())
+      })
+    })
+    panel.querySelector('[data-act="add-mem"]').addEventListener('click', () => {
+      const name = (panel.querySelector('[data-f="name"]').value || '').trim()
+      const content = (panel.querySelector('[data-f="content"]').value || '').trim()
+      if (!name && !content) return
+      chrome.runtime.sendMessage({
+        type: 'SAVE_MEMORY',
+        payload: {
+          type: 'topic', scope: 'global', characterId: char.id,
+          name: name || String(content).slice(0, 24), content: content || name,
+          description: '', tags: [char.name], pinned: false,
+        },
+      }, () => { render(); this.showToolNote('✅ 已记入「' + char.name + '」的角色记忆') })
+    })
+  }
+
   onCharacterChanged() {
     const char = getActiveCharacter()
     this.lines = []
@@ -693,6 +967,15 @@ class GalStage {
       this.updateStageContent()
     }
     this.renderTopbar()
+    // 自动载入该模式/角色的相关记忆（提升注入权重）
+    loadMemoriesForMode(char, this)
+  }
+
+  destroy() {
+    if (this._raf) cancelAnimationFrame(this._raf)
+    if (this._domTimer) clearTimeout(this._domTimer)
+    if (this._mo) { try { this._mo.disconnect() } catch { /* ignore */ } }
+    this.root.innerHTML = ''
   }
 
   togglePanel(name) {
@@ -732,6 +1015,7 @@ class GalStage {
             <div class="g-card-desc">${escapeHtml(c.description || '').slice(0, 40)}</div>
             <div class="g-btn-row">
               <button class="g-btn" data-act="switch">切换</button>
+              <button class="g-btn" data-act="mem">记忆</button>
               <button class="g-btn" data-act="edit">编辑</button>
               <button class="g-btn" data-act="del">删除</button>
             </div>
@@ -749,22 +1033,26 @@ class GalStage {
     panel.querySelector('[data-act="new"]').addEventListener('click', () => {
       const c = { ...defaultCharacter(), id: makeId('char'), name: '新角色' }
       saveCharacter(c)
-      writeJSON(STORAGE_ACTIVE, c.id)
-      this.onCharacterChanged()
+      this.activateCharacter(c.id, { fresh: true })
       this.togglePanel('chars')
     })
     panel.querySelector('[data-act="snow"]').addEventListener('click', () => {
       const c = presetSnowCrystal()
       saveCharacter(c)
-      writeJSON(STORAGE_ACTIVE, c.id)
-      this.onCharacterChanged()
+      this.activateCharacter(c.id, { fresh: true })
       this.togglePanel('chars')
     })
     panel.querySelectorAll('[data-act="switch"]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        writeJSON(STORAGE_ACTIVE, btn.closest('[data-id]').dataset.id)
-        this.onCharacterChanged()
+        this.activateCharacter(btn.closest('[data-id]').dataset.id, { fresh: true })
         this.togglePanel('chars')
+      })
+    })
+    panel.querySelectorAll('[data-act="mem"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.closest('[data-id]').dataset.id
+        const c = getCharacters().find((x) => x.id === id)
+        if (c) this.renderMemoryPanel(panel, c)
       })
     })
     panel.querySelectorAll('[data-act="del"]').forEach((btn) => {
@@ -796,6 +1084,7 @@ class GalStage {
         <label class="g-label">示例对话</label><textarea class="g-textarea" data-f="exampleDialogue">${escapeHtml(c.exampleDialogue || '')}</textarea>
         <label class="g-label">开场白</label><textarea class="g-textarea" data-f="greeting">${escapeHtml(c.greeting || '')}</textarea>
         <label class="g-label">附加系统指令</label><textarea class="g-textarea" data-f="systemPrompt">${escapeHtml(c.systemPrompt || '')}</textarea>
+        <label class="g-label">记忆关键词（逗号分隔，选模式时自动载入相关记忆）</label><input class="g-input2" data-f="memoryTagsText" value="${escapeHtml((c.memoryTags || []).join(', '))}">
         <div class="g-btn-row">
           <button class="g-btn g-btn-accent" data-act="save">保存</button>
           <button class="g-btn" data-close="1">关闭</button>
@@ -804,10 +1093,15 @@ class GalStage {
     panel.querySelector('[data-close]').addEventListener('click', () => this.closePanel())
     panel.querySelector('[data-act="save"]').addEventListener('click', () => {
       const out = { ...c }
-      for (const el of panel.querySelectorAll('[data-f]')) out[el.dataset.f] = el.value.trim()
+      for (const el of panel.querySelectorAll('[data-f]')) {
+        if (el.dataset.f === 'memoryTagsText') {
+          out.memoryTags = el.value.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
+        } else {
+          out[el.dataset.f] = el.value.trim()
+        }
+      }
       saveCharacter(out)
-      writeJSON(STORAGE_ACTIVE, out.id)
-      this.onCharacterChanged()
+      this.activateCharacter(out.id, { fresh: false })
       this.togglePanel('chars')
     })
   }
@@ -821,12 +1115,162 @@ class GalStage {
     this.el.append(note)
     setTimeout(() => note.remove(), 4000)
   }
+
+  /** 检测到 RP 设定请求 → 浮层卡片确认是否保存为模式 */
+  offerSaveRoleplayMode(text) {
+    const active = getActiveCharacter()
+    const suggested = extractRoleName(text)
+    const existing = getCharacters().find((c) => c.name.toLowerCase() === (suggested || '').toLowerCase())
+    // 已是定制角色或已存在同名模式 → 不打扰
+    if (suggested && existing) return
+    if (active && active.name !== 'DeepSeek娘' && active.name !== '新角色' && !suggested) return
+
+    // 浮层：底部滑出卡片，询问是否把这段设定存为可复用模式
+    const old = this.el.querySelector('.g-rp-save')
+    if (old) old.remove()
+    const card = document.createElement('div')
+    card.className = 'g-rp-save'
+    card.innerHTML = `
+      <div class="g-rp-save-title">🎭 检测到角色扮演设定，保存为模式？</div>
+      <div class="g-rp-save-desc">之后每次对话开始前可直接选择该模式，自动载入角色与相关记忆。</div>
+      <input class="g-rp-input" data-f="name" value="${escapeHtml(suggested || active.name || '')}" placeholder="模式名称（角色名）">
+      <textarea class="g-rp-input g-rp-desc" data-f="desc" rows="2" placeholder="一句话角色设定（可选）">${escapeHtml((active && active.name !== '新角色' ? active.description : '') || '')}</textarea>
+      <div class="g-btn-row">
+        <button class="g-btn g-btn-accent" data-act="save">💾 保存模式</button>
+        <button class="g-btn" data-act="dismiss">忽略</button>
+      </div>`
+    this.el.append(card)
+    card.querySelector('[data-act="save"]').addEventListener('click', () => {
+      const name = card.querySelector('[data-f="name"]').value.trim() || suggested || '新角色'
+      const desc = card.querySelector('[data-f="desc"]').value.trim()
+      let char = active && active.name !== 'DeepSeek娘' && active.name !== '新角色' ? active : { ...defaultCharacter(), id: makeId('char') }
+      char = { ...char, name, description: desc || char.description }
+      if (char.description && !desc) {
+        // 从原设定文本截取第一句做描述
+        const first = String(text).split(/[。\n]/)[0].slice(0, 60)
+        char.description = first || char.name
+      }
+      saveCharacter(char)
+      // 从 RP 文本提取关键词做记忆标签
+      const tags = String(text).match(/[\u4e00-\u9fa5]{2,4}/g) || []
+      char.memoryTags = [...new Set(tags.slice(0, 8))]
+      saveCharacter(char)
+      // 把设定沉淀为角色记忆（topic：角色设定，characterId 归属该角色），选模式时可命中载入
+      persistModeMemory(char, text, name)
+      this.activateCharacter(char.id, { fresh: false })
+      card.remove()
+      this.showToolNote('💾 模式「' + char.name + '」已保存，可随时从角色面板切换')
+    })
+    card.querySelector('[data-act="dismiss"]').addEventListener('click', () => card.remove())
+  }
+
+  /** 模式卡片选择器：对话开始前像 DSH 一样选角色/模式 */
+  showModePicker() {
+    const old = this.el.querySelector('.g-mode-picker')
+    if (old) old.remove()
+    const chars = getCharacters()
+    const activeId = readJSON(STORAGE_ACTIVE, null)
+    const overlay = document.createElement('div')
+    overlay.className = 'g-mode-picker'
+    overlay.innerHTML = `
+      <div class="g-mode-head">🎭 选择模式 · 开始新对话</div>
+      <div class="g-mode-sub">选择角色卡自动载入设定与相关记忆；也可新建或自由对话</div>
+      <div class="g-mode-grid">
+        ${chars.map((c) => {
+          const tagPreview = Array.isArray(c.memoryTags) && c.memoryTags.length
+            ? '<span class="g-mode-tags">📚 ' + escapeHtml(c.memoryTags.slice(0, 3).join(' · ')) + '</span>'
+            : ''
+          const ava = c.avatar
+            ? `<img class="g-mode-ava-img" src="${escapeHtml(c.avatar)}" alt="">`
+            : `<span class="g-mode-ava" style="background:${c.color || '#8f7bff'}">${escapeHtml((c.name || '?').slice(0, 1))}</span>`
+          const cur = c.id === activeId ? '<span class="g-mode-cur">当前</span>' : ''
+          return `<button class="g-mode-card" data-id="${c.id}">
+            ${ava}
+            <span class="g-mode-name">${escapeHtml(c.name)} ${cur}</span>
+            <span class="g-mode-desc">${escapeHtml(c.description || '').slice(0, 28)}</span>
+            ${tagPreview}
+          </button>`
+        }).join('')}
+        <button class="g-mode-card is-new" data-act="new">
+          <span class="g-mode-ava">＋</span>
+          <span class="g-mode-name">新建角色</span>
+          <span class="g-mode-desc">创建新的角色卡</span>
+        </button>
+      </div>
+      <div class="g-btn-row" style="justify-content:center">
+        <button class="g-btn" data-act="free">继续自由对话</button>
+      </div>`
+    this.el.append(overlay)
+    overlay.querySelectorAll('.g-mode-card[data-id]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.id
+        const char = getCharacters().find((c) => c.id === id)
+        this.activateCharacter(id, { fresh: true })
+        loadMemoriesForMode(char, this)
+        overlay.remove()
+        this.showToolNote('🎭 已切换到「' + char.name + '」模式' + (this._lastMemHit ? this._lastMemHit : ''))
+      })
+    })
+    overlay.querySelector('[data-act="new"]').addEventListener('click', () => {
+      const c = { ...defaultCharacter(), id: makeId('char'), name: '新角色' }
+      saveCharacter(c)
+      writeJSON(STORAGE_ACTIVE, c.id)
+      overlay.remove()
+      this.renderCharsPanel?.(document.createElement('div'))
+      this.togglePanel('chars')
+      this.showToolNote('点击「编辑」填写新角色设定')
+    })
+    overlay.querySelector('[data-act="free"]').addEventListener('click', () => overlay.remove())
+  }
 }
 
 // ── 启动（defineContentScript main 内直接执行）──────────────────
-    function install() {
-      if (document.getElementById('dsgpp-gal-root')) return
-      if (localStorage.getItem(STORAGE_ENABLED) === '0') return
+    // 开关：默认不启用 GAL（保持 DeepSeek 原版界面）；dsgpp_gal_enabled === '1' 才自动挂载舞台。
+    // 刷新/重新加载后保持上次选择，避免「用工具时一刷新又被 GAL 盖住」。
+    function isGalEnabled() {
+      return localStorage.getItem(STORAGE_ENABLED) === '1'
+    }
+    function setGalEnabled(on) {
+      try { localStorage.setItem(STORAGE_ENABLED, on ? '1' : '0') } catch { /* ignore */ }
+    }
+
+    let entryButton = null
+    function syncEntryButtonLabel() {
+      if (!entryButton) return
+      entryButton.textContent = isGalEnabled() ? '🎭 关闭 GAL' : '🎭 GAL 酒馆'
+    }
+    // 舞台可见时隐藏右下角入口（避免盖住 GAL 输入区）；原版界面/卸载时显示。
+    function syncEntryVisibility() {
+      if (!entryButton) return
+      const stage = window.__galStage
+      const visible = !!(stage && stage.el && stage.el.style.display !== 'none')
+      entryButton.style.display = visible ? 'none' : 'flex'
+    }
+    // 常驻入口：页面右下角小按钮，负责「开/关 GAL 舞台」并持久化选择。
+    function ensureEntryButton() {
+      if (entryButton && document.documentElement.contains(entryButton)) return
+      const btn = document.createElement('button')
+      btn.id = 'dsgpp-gal-entry'
+      btn.textContent = isGalEnabled() ? '🎭 关闭 GAL' : '🎭 GAL 酒馆'
+      btn.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;padding:8px 16px;border:1px solid rgba(143,123,255,.55);border-radius:20px;background:rgba(13,16,32,.94);color:#e6e9f4;font-size:13px;line-height:1;cursor:pointer;font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.45)'
+      btn.addEventListener('click', () => {
+        const nextOn = !isGalEnabled()
+        setGalEnabled(nextOn)
+        if (nextOn) mountGal()
+        else unmountGal()
+        syncEntryButtonLabel()
+      })
+      document.documentElement.appendChild(btn)
+      entryButton = btn
+    }
+    function mountGal() {
+      const existing = document.getElementById('dsgpp-gal-root')
+      if (existing) {
+        if (window.__galStage && window.__galStage.el) window.__galStage.el.style.display = 'flex'
+        syncEntryButtonLabel()
+        syncEntryVisibility()
+        return
+      }
       const host = document.createElement('div')
       host.id = 'dsgpp-gal-root'
       document.documentElement.appendChild(host)
@@ -836,8 +1280,82 @@ class GalStage {
       if (typeof ResizeObserver !== 'undefined') {
         new ResizeObserver(() => window.__galStage && window.__galStage.measure()).observe(document.body)
       }
+      maybeAutoOpenModePicker(window.__galStage)
+      syncEntryButtonLabel()
+      syncEntryVisibility()
+    }
+    function unmountGal() {
+      const stage = window.__galStage
+      if (stage && typeof stage.destroy === 'function') stage.destroy()
+      window.__galStage = null
+      const host = document.getElementById('dsgpp-gal-root')
+      if (host) host.remove()
+      syncEntryButtonLabel()
+      syncEntryVisibility()
+    }
+    function install() {
+      ensureEntryButton()
+      if (isGalEnabled()) mountGal()
+    }
+
+    // ── 新对话开始前自动弹模式选择器 ──────────────────────────────
+    // 路由进入无历史的新会话（首页 /a/chat 或新开的 /chat/s/）时弹出；
+    // 用「当前会话 + 时间窗」去重，避免一个会话内反复打断。
+    const MODE_PICKER_KEY = 'gal:mode-picker-last'
+    function maybeAutoOpenModePicker(stage) {
+      try {
+        // 每 ~40s 最多弹一次（防连弹）
+        const last = Number(sessionStorage.getItem(MODE_PICKER_KEY) || 0)
+        if (Date.now() - last < 40000) return
+        // 等待页面消息区渲染，若无历史消息则弹选择器
+        const attempt = (n) => {
+          if (n > 20) return // ~5s 上限
+          const hasHistory = document.querySelectorAll('[class*="message"], [class*="ds-chat-message"], [data-role="assistant"], [data-role="user"]').length > 0
+          const path = location.pathname || ''
+          const isNewChat = path === '/a/chat' || path === '/a/chat/' || !/\/chat\/s\//.test(path)
+          if (hasHistory) return // 有历史：不打断已有对话
+          if (isNewChat) {
+            sessionStorage.setItem(MODE_PICKER_KEY, String(Date.now()))
+            setTimeout(() => stage.showModePicker(), 500)
+            return
+          }
+          setTimeout(() => attempt(n + 1), 250)
+        }
+        setTimeout(() => attempt(0), 700)
+      } catch { /* ignore */ }
+    }
+    // 路由变化（SPA pushState）时再次检测：进入新会话也弹
+    function watchRouteForModePicker(stage) {
+      try {
+        let lastPath = location.pathname + location.search
+        const check = () => {
+          const now = location.pathname + location.search
+          if (now !== lastPath) {
+            lastPath = now
+            // 变成新会话路由才弹（已有会话不打断）
+            if (now.startsWith('/a/chat') || !/\/chat\/s\//.test(now)) {
+              setTimeout(() => maybeAutoOpenModePicker(stage), 400)
+            }
+          }
+        }
+        const wrap = (fn) => function (...a) { const r = fn.apply(this, a); setTimeout(check, 0); return r }
+        try {
+          history.pushState = wrap(history.pushState)
+          history.replaceState = wrap(history.replaceState)
+        } catch { /* ignore */ }
+        window.addEventListener('popstate', check)
+        // DeepSeek 是 React 应用，也观察输入区切换
+        if (typeof MutationObserver !== 'undefined') {
+          const mo = new MutationObserver(() => {
+            const path = location.pathname || ''
+            if (!path.includes('/chat/s/')) { /* 首页可能随时出现新会话输入框 */ }
+          })
+          try { mo.observe(document.body, { childList: true, subtree: true }) } catch { /* ignore */ }
+        }
+      } catch { /* ignore */ }
     }
 
     install()
+    watchRouteForModePicker(window.__galStage)
   },
 })

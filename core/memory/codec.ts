@@ -20,7 +20,8 @@ export function decodeStoredMemory(
 ): Omit<Memory, 'id'> {
   const object = objectValue(value, path);
   const scope = memoryScope(object.scope, `${path}.scope`);
-  const { id: _id, projectId: _projectId, ...additiveFields } = object;
+  const { id: _id, projectId: _projectId, characterId: _characterId, ...additiveFields } = object;
+  const characterId = optionalString(object.characterId, `${path}.characterId`);
   return {
     ...additiveFields,
     syncId: nonEmptyString(object.syncId, `${path}.syncId`),
@@ -28,6 +29,7 @@ export function decodeStoredMemory(
     ...(scope === 'project'
       ? { projectId: nonEmptyString(object.projectId, `${path}.projectId`) }
       : {}),
+    ...(characterId !== undefined ? { characterId } : {}),
     type: enumValue(object.type, MEMORY_TYPES, `${path}.type`),
     name: nonEmptyString(object.name, `${path}.name`),
     content: nonEmptyString(object.content, `${path}.content`),
@@ -69,6 +71,7 @@ export function decodeImportedMemory(
     projectId: scope === 'project'
       ? nonEmptyString(object.projectId, `${path}.projectId`)
       : undefined,
+    characterId: optionalString(object.characterId, `${path}.characterId`),
     type: enumValue(object.type, MEMORY_TYPES, `${path}.type`),
     name: nonEmptyString(object.name, `${path}.name`),
     content: nonEmptyString(object.content, `${path}.content`),
@@ -100,6 +103,11 @@ function nonEmptyString(value: unknown, path: string): string {
 function stringValue(value: unknown, path: string): string {
   if (typeof value !== 'string') throw new Error(`${path} must be a string`);
   return value;
+}
+
+function optionalString(value: unknown, path: string): string | undefined {
+  if (value === undefined) return undefined;
+  return stringValue(value, path);
 }
 
 function booleanValue(value: unknown, path: string): boolean {

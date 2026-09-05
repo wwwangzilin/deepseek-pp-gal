@@ -225,6 +225,8 @@ export interface Memory {
   syncId: string;
   scope: MemoryScope;
   projectId?: string;
+  /** 角色归属：设置了则只属于该角色（激活该角色时才可见/注入）；未设置=全局共享。与 scope 正交。 */
+  characterId?: string;
   type: MemoryType;
   name: string;
   content: string;
@@ -244,6 +246,7 @@ export type NewMemory = Omit<
   syncId?: string;
   scope?: MemoryScope;
   projectId?: string;
+  characterId?: string;
 };
 
 export interface SyncConfigBase {
@@ -527,6 +530,8 @@ export interface SystemPromptPreset {
   content: string;
   createdAt: number;
   updatedAt: number;
+  /** 角色归属（GAL 角色卡）：设置后记忆注入按该角色过滤；普通预设无此字段。 */
+  characterId?: string;
 }
 
 export interface DeepSeekRequest {
