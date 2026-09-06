@@ -2,12 +2,16 @@ import type { NewMemory } from '../../core/types';
 import { getActivePreset } from '../../core/preset/store';
 
 /**
- * 把「当前激活 GAL 角色」归属到模型自动沉淀的记忆上（characterId）。
+ * Attributes memories that the model auto-consolidates to the currently
+ * active GAL character (characterId).
  *
- * 只在模型经 memory 工具落库的路径调用：
- * - 模型在角色扮演对话中主动记住的内容 → 自动归入该角色的记忆空间（记忆跟着角色走）；
- * - 用户经 sidepanel / gal 界面手动添加的记忆不走这里，归属由调用方显式给出；
- * - 未激活任何带 characterId 的预设（普通 deepseek-pp 模式）→ 原样返回，行为不变。
+ * Wired only into the model's memory-tool persistence path:
+ * - memories the model saves while roleplaying are attributed to that
+ *   character automatically (memory follows the character);
+ * - memories added manually from the sidepanel / GAL UI do not go through
+ *   here — the caller states ownership explicitly;
+ * - when no character-bound preset is active (plain deepseek-pp mode) the
+ *   memory is returned unchanged.
  */
 export async function attributeMemoryToActiveCharacter(
   memory: NewMemory,

@@ -18,6 +18,7 @@ const scanTargets = [
 
 const pathAllowlist = new Map([
   ['core/constants.ts', 'legacy zh-CN prompt constants and Chinese stop words retained for backward-compatible parsing; active prompts are locale resources'],
+  ['entrypoints/gal-view.content.ts', 'GAL stage is a fork-specific single-locale (Simplified Chinese) roleplay UI hardcoded by design and intentionally not wired into the i18n resource pipeline (GAL fork only; upstream code stays locale-backed)'],
   ['core/export/artifact-markdown.ts', 'generated export artifact fallback copy; export UI chrome is locale-backed'],
   ['core/export/normalize.ts', 'generated export data fallback title; user-authored conversation content is preserved'],
   ['core/export/schema.ts', 'conversation export validation diagnostics are internal data-contract errors'],

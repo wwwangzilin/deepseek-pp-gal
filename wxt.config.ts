@@ -101,7 +101,7 @@ export function createManifest(env: ConfigEnv): UserManifest {
         resources: ['pet/*.png', 'deepseek/*.wasm'],
         matches: ['*://chat.deepseek.com/*'],
       },
-      // GAL 酒馆舞台素材（立绘/背景/对话框），仅 DeepSeek 宿主可用
+      // GAL stage assets (character art / background / dialogue box), DeepSeek host only
       {
         resources: ['gal/*.png'],
         matches: ['*://chat.deepseek.com/*'],

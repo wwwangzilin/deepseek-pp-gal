@@ -225,7 +225,7 @@ export interface Memory {
   syncId: string;
   scope: MemoryScope;
   projectId?: string;
-  /** 角色归属：设置了则只属于该角色（激活该角色时才可见/注入）；未设置=全局共享。与 scope 正交。 */
+  /** Character ownership: when set, the memory belongs to that character only (visible/injected only while it is active); unset = shared globally. Orthogonal to scope. */
   characterId?: string;
   type: MemoryType;
   name: string;
@@ -530,7 +530,7 @@ export interface SystemPromptPreset {
   content: string;
   createdAt: number;
   updatedAt: number;
-  /** 角色归属（GAL 角色卡）：设置后记忆注入按该角色过滤；普通预设无此字段。 */
+  /** Character ownership (GAL character card): memory injection is filtered by this role when set; plain presets leave it unset. */
   characterId?: string;
 }
 

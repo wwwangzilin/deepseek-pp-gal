@@ -11,9 +11,12 @@ export function filterMemoriesByProjectScope(
 }
 
 /**
- * 角色维度过滤：只有「全局共享记忆（无 characterId）+ 当前激活角色的记忆」可见。
- * - activeCharacterId 为空（无 GAL 角色激活）：角色记忆一律不可见（保持非角色模式行为干净）；
- * - 激活角色后：该角色专属记忆与其共享的全局记忆一起进入候选，其它角色的记忆不泄漏。
+ * Character-dimension filter: only "global shared memories (no characterId)
+ * plus memories owned by the currently active character" stay visible.
+ * - No active character: character-owned memories are never injected
+ *   (keeps plain non-character mode clean);
+ * - With an active character: that character's memories and the shared
+ *   global memories are candidates; other characters' memories never leak.
  */
 export function filterMemoriesByCharacterScope(
   memories: readonly Memory[],
@@ -28,7 +31,7 @@ export function filterMemoriesByCharacterScope(
   });
 }
 
-/** 注入候选记忆：先按项目作用域过滤，再按激活角色过滤。 */
+/** Injection candidates: project scope first, then active-character scope. */
 export function filterMemoriesForInjection(
   memories: readonly Memory[],
   projectId?: string | null,
