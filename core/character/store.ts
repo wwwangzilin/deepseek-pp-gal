@@ -69,9 +69,15 @@ export async function saveCharacter(character: NewGalCharacter): Promise<GalChar
       : makeCharacterId();
     const now = Date.now();
     const existing = characters.find((item) => item.id === id);
-    const merged: GalCharacter = existing
-      ? decodeGalCharacter({ ...existing, ...character, id, updatedAt: now }, 'galCharacter')
-      : decodeGalCharacter({ ...character, id, createdAt: now, updatedAt: now }, 'galCharacter');
+    // Preserve createdAt across edits: the inbound NewGalCharacter may carry
+    // placeholder timestamps from message decode; creation time comes from the
+    // existing row (or now for a brand-new character).
+    const merged: GalCharacter = decodeGalCharacter({
+      ...character,
+      id,
+      updatedAt: now,
+      createdAt: existing?.createdAt ?? now,
+    }, 'galCharacter');
     const next = existing
       ? characters.map((item) => (item.id === id ? merged : item))
       : [...characters, merged];

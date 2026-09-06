@@ -103,7 +103,7 @@ export default function CharacterPage() {
     try {
       const payload: NewGalCharacter = existingId
         ? { ...draft, id: existingId }
-        : { ...draft };
+        : { ...draft, id: makeCharacterId() };
       const saved = await sidepanelRuntimeClient.request(
         { type: 'SAVE_CHARACTER', payload },
         {
@@ -274,6 +274,10 @@ export default function CharacterPage() {
       )}
     </div>
   );
+}
+
+function makeCharacterId(): string {
+  return 'char-' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36);
 }
 
 function Avatar({ character, size }: { character: GalCharacter; size: number }) {
