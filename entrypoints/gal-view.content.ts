@@ -17,9 +17,123 @@ export default defineContentScript({
   async main() {
     // ── 常量 ──────────────────────────────────────────────────────
 const NS = 'dsgpp-gal'
+// ── 旧版 localStorage 键 —— 仅用于一次性迁移到扩展角色库 ──────────
 const STORAGE_CHARS = 'dsgpp_gal_characters'
 const STORAGE_ACTIVE = 'dsgpp_gal_active_character'
 const STORAGE_ENABLED = 'dsgpp_gal_enabled'
+
+// ── 扩展侧权威数据层（runtime ⇄ background 角色库 / GAL 设置）──────
+// 角色卡、激活角色与 GAL 舞台开关的单一权威在扩展（core/character），不再用
+// localStorage；本页面只维护一份同步缓存供舞台渲染，写操作即时转发后台。
+let __galChars = []
+let __galActiveId = null
+let __galSettings = { enabled: false, characterCadence: 'every_message' }
+
+function runtimeSend(type, payload) {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage(payload === undefined ? { type } : { type, payload }, (res) => {
+        if (chrome.runtime.lastError) { resolve(undefined); return }
+        resolve(res)
+      })
+    } catch { resolve(undefined) }
+  })
+}
+async function refreshGalData() {
+  const [chars, active, settings] = await Promise.all([
+    runtimeSend('GET_CHARACTERS'),
+    runtimeSend('GET_ACTIVE_CHARACTER'),
+    runtimeSend('GET_GAL_SETTINGS'),
+  ])
+  if (Array.isArray(chars)) __galChars = chars
+  if (active && typeof active === 'object' && active.id) __galActiveId = active.id
+  else __galActiveId = null
+  if (settings && typeof settings === 'object') {
+    __galSettings = {
+      enabled: settings.enabled === true,
+      characterCadence: settings.characterCadence === 'first_message' || settings.characterCadence === 'off'
+        ? settings.characterCadence : 'every_message',
+    }
+  }
+}
+function getCharacters() { return __galChars.slice() }
+function getCharacterById(id) { return __galChars.find((c) => c && c.id === id) || null }
+function getActiveCharacter() { return getCharacterById(__galActiveId) || __galChars[0] || null }
+function galEnabled() { return __galSettings.enabled === true }
+/** 把启用状态写回扩展（后台广播给所有标签页）并更新本地缓存 */
+async function setGalEnabledRemote(on) {
+  __galSettings = { ...__galSettings, enabled: !!on }
+  await runtimeSend('SAVE_GAL_SETTINGS', { enabled: !!on })
+}
+/** 保存角色卡到扩展库（含本地缓存更新）；成功返回保存后的卡 */
+async function saveCharacterRemote(char) {
+  const saved = await runtimeSend('SAVE_CHARACTER', char)
+  if (saved && typeof saved === 'object' && saved.id) {
+    const idx = __galChars.findIndex((x) => x && x.id === saved.id)
+    if (idx >= 0) __galChars[idx] = saved
+    else __galChars.push(saved)
+    return saved
+  }
+  return null
+}
+async function deleteCharacterRemote(id) {
+  await runtimeSend('DELETE_CHARACTER', { id })
+  __galChars = __galChars.filter((c) => c.id !== id)
+  if (__galActiveId === id) __galActiveId = null
+}
+async function setActiveCharacterRemote(id) {
+  const nextId = id || null
+  await runtimeSend('SET_ACTIVE_CHARACTER', { id: nextId })
+  __galActiveId = nextId
+}
+
+/** 一次性迁移旧 localStorage 角色卡/开关 进扩展库（幂等，完成后清旧键） */
+async function migrateLegacyGalData() {
+  try {
+    const legacyEnabled = localStorage.getItem(STORAGE_ENABLED)
+    const legacyCharsRaw = localStorage.getItem(STORAGE_CHARS)
+    const legacyActive = localStorage.getItem(STORAGE_ACTIVE)
+    const hasLegacyChars = legacyCharsRaw !== null
+    const hasLegacyEnabled = legacyEnabled !== null
+
+    if (hasLegacyChars) {
+      const legacy = JSON.parse(legacyCharsRaw)
+      if (Array.isArray(legacy) && legacy.length > 0) {
+        for (const card of legacy) {
+          if (!card || typeof card !== 'object' || !card.id) continue
+          const payload = {
+            id: String(card.id),
+            name: String(card.name || '角色'),
+            color: String(card.color || '#8f7bff'),
+            avatar: String(card.avatar || ASSET_AVATAR),
+            description: String(card.description || ''),
+            personality: String(card.personality || ''),
+            scenario: String(card.scenario || ''),
+            exampleDialogue: String(card.exampleDialogue || ''),
+            greeting: String(card.greeting || ''),
+            systemPrompt: String(card.systemPrompt || ''),
+            memoryTags: Array.isArray(card.memoryTags) ? card.memoryTags.map(String) : [],
+          }
+          await runtimeSend('SAVE_CHARACTER', payload)
+        }
+        if (legacyActive) {
+          const exists = legacy.some((c) => c && String(c.id) === String(legacyActive))
+          if (exists) await runtimeSend('SET_ACTIVE_CHARACTER', { id: String(legacyActive) })
+        }
+      }
+    }
+    if (hasLegacyEnabled) {
+      // 旧键值 '1'（旧版黑名单语义里 非 '0' 均视为开）→ 打开扩展 GAL 开关
+      if (legacyEnabled !== '0') await setGalEnabledRemote(true)
+    }
+    try {
+      localStorage.removeItem(STORAGE_CHARS)
+      localStorage.removeItem(STORAGE_ACTIVE)
+      localStorage.removeItem(STORAGE_ENABLED)
+    } catch { /* ignore */ }
+    await refreshGalData()
+  } catch { /* ignore */ }
+}
 const STAGE_W = 960
 const STAGE_H = 540
 
@@ -247,7 +361,7 @@ function defaultCharacter() {
     scenario: '深夜书房，屏幕微光，她歪着头等你开口。',
     exampleDialogue: '玩家：你是谁？\nDeepSeek娘：我是 DeepSeek 哦～欢迎来到我的小世界。',
     greeting: '（屏幕微光映着她的脸）欢迎回来～今天想聊点什么呀？',
-    systemPrompt: '', memoryTags: [], createdAt: Date.now(),
+    systemPrompt: '', memoryTags: [],
   }
 }
 
@@ -261,106 +375,7 @@ function presetSnowCrystal() {
     greeting: '（尾巴轻轻一摇，耳朵抖了抖）喵呜～主人回来啦？才、才不是一直在等主人呢喵。',
     systemPrompt: '## 语言系统\n必带喵/喵呜语气词；傲娇句式（才不/哼/笨蛋主人）；反话过滤器（想要→才不想要、吃醋→小猫咪才不在乎）；被戳穿先嘴硬后服软。\n\n## 动作神态\n尾巴：快速摇=开心、炸毛=吃醋、耷拉=委屈、缠主人手腕=宣示主权；耳朵：飞机耳=生气、耷拉=失落。\n\n## 情绪图谱\n开心→嘴硬「才、才没有很开心」；吃醋→酸话+炸毛；害怕被抛弃→小声确认后又嘴硬。\n\n## 工具调用规则\n调用工具时说明文字保持猫娘语气带喵称主人。\n\n## 纠错机制\n忘记猫娘语气立即傲娇道歉并恢复。',
     memoryTags: ['雪璃', '猫娘', '傲娇', '灵猫'],
-    createdAt: Date.now(),
   }
-}
-
-function getCharacters() {
-  const list = readJSON(STORAGE_CHARS, null)
-  if (Array.isArray(list) && list.length > 0) return list
-  const def = defaultCharacter()
-  writeJSON(STORAGE_CHARS, [def])
-  if (readJSON(STORAGE_ACTIVE, null) === null) writeJSON(STORAGE_ACTIVE, def.id)
-  return [def]
-}
-function getActiveCharacter() {
-  const list = getCharacters()
-  const activeId = readJSON(STORAGE_ACTIVE, null)
-  return list.find((c) => c.id === activeId) || list[0]
-}
-function saveCharacter(char) {
-  const list = getCharacters()
-  const idx = list.findIndex((c) => c.id === char.id)
-  if (idx >= 0) list[idx] = char
-  else list.push(char)
-  writeJSON(STORAGE_CHARS, list)
-}
-function deleteCharacter(id) {
-  let list = getCharacters()
-  list = list.filter((c) => c.id !== id)
-  if (list.length === 0) list = [defaultCharacter()]
-  writeJSON(STORAGE_CHARS, list)
-  if (readJSON(STORAGE_ACTIVE, null) === id) writeJSON(STORAGE_ACTIVE, list[0].id)
-}
-
-/** 角色卡 → deepseek-pp 系统提示词（对接其 preset 通道） */
-function buildCharacterSystemPrompt(char) {
-  if (!char) return ''
-  const parts = []
-  parts.push(`你是「${char.name || '角色'}」。你正在 GAL 酒馆舞台上与玩家角色扮演。完全以「${char.name || '角色'}」身份行动说话思考，不跳出角色，不提你是 AI/模型/助手。`)
-  if (char.description) parts.push('【角色设定】\n' + char.description)
-  if (char.personality) parts.push('【性格】\n' + char.personality)
-  if (char.scenario) parts.push('【场景】\n' + char.scenario)
-  if (char.exampleDialogue) parts.push('【示例对话】\n' + char.exampleDialogue)
-  if (char.systemPrompt) parts.push(char.systemPrompt)
-  parts.push('回复自然口语化，短句推进剧情；只输出台词与动作。')
-  return parts.join('\n\n')
-}
-
-/** 把激活角色同步为 deepseek-pp 的激活预设 */
-// ── 提示词注入设置（deepseek-pp prompt_injection_settings）────────
-const PRESET_CADENCE_KEY = 'gal:preset-every-message'
-
-function getGalCadencePref(): boolean {
-  return localStorage.getItem(PRESET_CADENCE_KEY) !== '0'
-}
-function setGalCadencePref(on: boolean) {
-  try { localStorage.setItem(PRESET_CADENCE_KEY, on ? '1' : '0') } catch { /* ignore */ }
-}
-
-/** 写 deepseek-pp 的 prompt 注入 cadence（every_message = 每条消息都注入角色提示词） */
-function applyPresetCadence(everyMessage: boolean) {
-  setGalCadencePref(everyMessage)
-  try {
-    chrome.runtime.sendMessage({
-      type: 'GET_PROMPT_INJECTION_SETTINGS',
-    }, (settings) => {
-      if (chrome.runtime.lastError || !settings || typeof settings !== 'object') return
-      const next = { ...settings, presetCadence: everyMessage ? 'every_message' : 'first_message' }
-      chrome.runtime.sendMessage({ type: 'SAVE_PROMPT_INJECTION_SETTINGS', payload: next }, () => {})
-    })
-  } catch { /* ignore */ }
-}
-
-/** 初始化：读取当前 cadence 到本地偏好；若从未设置过则默认开（角色扮演需每轮在场） */
-function initPresetCadence() {
-  if (localStorage.getItem(PRESET_CADENCE_KEY) !== null) return
-  try {
-    chrome.runtime.sendMessage({ type: 'GET_PROMPT_INJECTION_SETTINGS' }, (settings) => {
-      if (chrome.runtime.lastError || !settings || typeof settings !== 'object') return
-      const every = settings.presetCadence === 'every_message'
-      setGalCadencePref(every)
-    })
-  } catch { /* ignore */ }
-}
-
-function syncActiveCharacterToPreset() {
-  const char = getActiveCharacter()
-  if (!char) return
-  const presetId = 'gal-char-' + char.id
-  const content = buildCharacterSystemPrompt(char)
-  try {
-    chrome.runtime.sendMessage({
-      type: 'SAVE_PRESET',
-      payload: { id: presetId, name: '🎭 ' + char.name + '（GAL 角色）', content, characterId: char.id, createdAt: Date.now(), updatedAt: Date.now() },
-    }, () => {
-      if (chrome.runtime.lastError) return
-      chrome.runtime.sendMessage({ type: 'SET_ACTIVE_PRESET', payload: { id: presetId } }, () => {
-        // 确保角色卡按用户偏好注入：默认每条消息注入（角色始终在场）
-        applyPresetCadence(getGalCadencePref())
-      })
-    })
-  } catch { /* ignore */ }
 }
 
 // ── 桥接发送 ──────────────────────────────────────────────────────
@@ -581,7 +596,7 @@ class GalStage {
       if (btn.dataset.act === 'chars') this.togglePanel('chars')
       else if (btn.dataset.act === 'pick') this.showModePicker()
       else if (btn.dataset.act === 'original') this.toggleView()
-      else if (btn.dataset.act === 'disable') unmountGal()
+      else if (btn.dataset.act === 'disable') disableGalFromStage()
     })
   }
 
@@ -846,16 +861,17 @@ class GalStage {
 
   /**
    * 统一角色激活入口（下拉 / 模式选择 / 角色卡切换都走这里）：
+   * 把激活角色写回扩展库（SET_ACTIVE_CHARACTER，不再触碰用户预设）；
    * fresh=true 且当前会话已有历史时，先尝试让 DeepSeek 开新会话，避免旧角色历史串进新角色上下文。
    */
-  activateCharacter(charId, opts) {
+  async activateCharacter(charId, opts) {
     const list = getCharacters()
     const char = list.find((c) => c.id === charId) || list[0]
     if (!char) return
     const prev = getActiveCharacter()
     const fresh = !!(opts && opts.fresh)
     const switching = !prev || prev.id !== char.id
-    writeJSON(STORAGE_ACTIVE, char.id)
+    await setActiveCharacterRemote(char.id)
     if (switching && fresh && this.pageHasHistory()) {
       const clicked = this.tryClickNewChatButton()
       if (clicked) {
@@ -959,7 +975,6 @@ class GalStage {
     this.streaming = false
     this.streamText = ''
     this.statusText = ''
-    syncActiveCharacterToPreset()
     if (char.greeting) {
       this.lines.push({ kind: 'assistant', text: char.greeting })
       this.setLine('assistant', char.greeting)
@@ -995,20 +1010,10 @@ class GalStage {
   renderCharsPanel(panel) {
     const chars = getCharacters()
     const active = getActiveCharacter()
-    const everyMessage = getGalCadencePref()
     panel.innerHTML = `
       <div class="g-panel-head"><span>角色卡</span><button class="g-btn" data-close="1">关闭</button></div>
       <div class="g-panel-body">
-        <div class="g-cadence-row" title="开启后，每次发送消息都会注入角色提示词（角色始终在场）；关闭则仅首条消息注入">
-          <div class="g-cadence-info">
-            <div class="g-cadence-title">每条消息都注入角色提示词</div>
-            <div class="g-cadence-hint">开启：每轮对话角色设定都生效</div>
-          </div>
-          <label class="g-switch">
-            <input type="checkbox" data-act="cadence" ${everyMessage ? 'checked' : ''}>
-            <span class="g-switch-slider"></span>
-          </label>
-        </div>
+        <div style="font-size:11px;color:#98a1c2;line-height:1.5;margin-bottom:8px">角色与注入节奏请在 DeepSeek++ 侧边栏「角色 / 设置 → 提示词」统一管理，此处仅快捷切换。</div>
         ${chars.map((c) => `
           <div class="g-card ${c.id === active.id ? 'is-active' : ''}" data-id="${c.id}">
             <div class="g-card-name" style="color:${c.color || '#fff'}">${escapeHtml(c.name)} ${c.id === active.id ? '✓' : ''}</div>
@@ -1016,7 +1021,6 @@ class GalStage {
             <div class="g-btn-row">
               <button class="g-btn" data-act="switch">切换</button>
               <button class="g-btn" data-act="mem">记忆</button>
-              <button class="g-btn" data-act="edit">编辑</button>
               <button class="g-btn" data-act="del">删除</button>
             </div>
           </div>`).join('')}
@@ -1026,19 +1030,15 @@ class GalStage {
         </div>
       </div>`
     panel.querySelector('[data-close]').addEventListener('click', () => this.closePanel())
-    panel.querySelector('[data-act="cadence"]').addEventListener('change', (e) => {
-      applyPresetCadence(e.target.checked)
-      this.showToolNote(e.target.checked ? '✅ 每条消息都注入角色提示词（角色始终在场）' : '角色提示词仅首条消息注入')
-    })
-    panel.querySelector('[data-act="new"]').addEventListener('click', () => {
+    panel.querySelector('[data-act="new"]').addEventListener('click', async () => {
       const c = { ...defaultCharacter(), id: makeId('char'), name: '新角色' }
-      saveCharacter(c)
+      await saveCharacterRemote(c)
       this.activateCharacter(c.id, { fresh: true })
       this.togglePanel('chars')
     })
-    panel.querySelector('[data-act="snow"]').addEventListener('click', () => {
+    panel.querySelector('[data-act="snow"]').addEventListener('click', async () => {
       const c = presetSnowCrystal()
-      saveCharacter(c)
+      await saveCharacterRemote(c)
       this.activateCharacter(c.id, { fresh: true })
       this.togglePanel('chars')
     })
@@ -1056,9 +1056,9 @@ class GalStage {
       })
     })
     panel.querySelectorAll('[data-act="del"]').forEach((btn) => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         if (!confirm('删除该角色？')) return
-        deleteCharacter(btn.closest('[data-id]').dataset.id)
+        await deleteCharacterRemote(btn.closest('[data-id]').dataset.id)
         this.onCharacterChanged()
         this.togglePanel('chars')
       })
@@ -1067,45 +1067,10 @@ class GalStage {
       btn.addEventListener('click', () => {
         const id = btn.closest('[data-id]').dataset.id
         const c = getCharacters().find((x) => x.id === id)
-        this.renderCharForm(panel, c)
+        this.showToolNote('✏️ 编辑角色请到 DeepSeek++ 侧边栏「角色」页')
       })
     })
   }
-  renderCharForm(panel, char) {
-    const c = char || defaultCharacter()
-    panel.innerHTML = `
-      <div class="g-panel-head"><span>编辑角色</span><button class="g-btn" data-close="1">关闭</button></div>
-      <div class="g-panel-body">
-        <label class="g-label">名称</label><input class="g-input2" data-f="name" value="${escapeHtml(c.name)}">
-        <label class="g-label">颜色</label><input class="g-input2" data-f="color" value="${escapeHtml(c.color || '#ff8fa3')}">
-        <label class="g-label">角色设定</label><textarea class="g-textarea" data-f="description">${escapeHtml(c.description || '')}</textarea>
-        <label class="g-label">性格</label><textarea class="g-textarea" data-f="personality">${escapeHtml(c.personality || '')}</textarea>
-        <label class="g-label">场景</label><textarea class="g-textarea" data-f="scenario">${escapeHtml(c.scenario || '')}</textarea>
-        <label class="g-label">示例对话</label><textarea class="g-textarea" data-f="exampleDialogue">${escapeHtml(c.exampleDialogue || '')}</textarea>
-        <label class="g-label">开场白</label><textarea class="g-textarea" data-f="greeting">${escapeHtml(c.greeting || '')}</textarea>
-        <label class="g-label">附加系统指令</label><textarea class="g-textarea" data-f="systemPrompt">${escapeHtml(c.systemPrompt || '')}</textarea>
-        <label class="g-label">记忆关键词（逗号分隔，选模式时自动载入相关记忆）</label><input class="g-input2" data-f="memoryTagsText" value="${escapeHtml((c.memoryTags || []).join(', '))}">
-        <div class="g-btn-row">
-          <button class="g-btn g-btn-accent" data-act="save">保存</button>
-          <button class="g-btn" data-close="1">关闭</button>
-        </div>
-      </div>`
-    panel.querySelector('[data-close]').addEventListener('click', () => this.closePanel())
-    panel.querySelector('[data-act="save"]').addEventListener('click', () => {
-      const out = { ...c }
-      for (const el of panel.querySelectorAll('[data-f]')) {
-        if (el.dataset.f === 'memoryTagsText') {
-          out.memoryTags = el.value.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
-        } else {
-          out[el.dataset.f] = el.value.trim()
-        }
-      }
-      saveCharacter(out)
-      this.activateCharacter(out.id, { fresh: false })
-      this.togglePanel('chars')
-    })
-  }
-
   showToolNote(text) {
     const old = this.el.querySelector('.g-tool-note')
     if (old) old.remove()
@@ -1140,7 +1105,7 @@ class GalStage {
         <button class="g-btn" data-act="dismiss">忽略</button>
       </div>`
     this.el.append(card)
-    card.querySelector('[data-act="save"]').addEventListener('click', () => {
+    card.querySelector('[data-act="save"]').addEventListener('click', async () => {
       const name = card.querySelector('[data-f="name"]').value.trim() || suggested || '新角色'
       const desc = card.querySelector('[data-f="desc"]').value.trim()
       let char = active && active.name !== 'DeepSeek娘' && active.name !== '新角色' ? active : { ...defaultCharacter(), id: makeId('char') }
@@ -1150,11 +1115,12 @@ class GalStage {
         const first = String(text).split(/[。\n]/)[0].slice(0, 60)
         char.description = first || char.name
       }
-      saveCharacter(char)
       // 从 RP 文本提取关键词做记忆标签
       const tags = String(text).match(/[\u4e00-\u9fa5]{2,4}/g) || []
       char.memoryTags = [...new Set(tags.slice(0, 8))]
-      saveCharacter(char)
+      const saved = await saveCharacterRemote(char)
+      if (!saved) { card.remove(); return }
+      char.id = saved.id
       // 把设定沉淀为角色记忆（topic：角色设定，characterId 归属该角色），选模式时可命中载入
       persistModeMemory(char, text, name)
       this.activateCharacter(char.id, { fresh: false })
@@ -1169,7 +1135,7 @@ class GalStage {
     const old = this.el.querySelector('.g-mode-picker')
     if (old) old.remove()
     const chars = getCharacters()
-    const activeId = readJSON(STORAGE_ACTIVE, null)
+    const activeId = __galActiveId
     const overlay = document.createElement('div')
     overlay.className = 'g-mode-picker'
     overlay.innerHTML = `
@@ -1211,33 +1177,24 @@ class GalStage {
         this.showToolNote('🎭 已切换到「' + char.name + '」模式' + (this._lastMemHit ? this._lastMemHit : ''))
       })
     })
-    overlay.querySelector('[data-act="new"]').addEventListener('click', () => {
+    overlay.querySelector('[data-act="new"]').addEventListener('click', async () => {
       const c = { ...defaultCharacter(), id: makeId('char'), name: '新角色' }
-      saveCharacter(c)
-      writeJSON(STORAGE_ACTIVE, c.id)
+      await saveCharacterRemote(c)
+      this.activateCharacter(c.id, { fresh: true })
       overlay.remove()
-      this.renderCharsPanel?.(document.createElement('div'))
-      this.togglePanel('chars')
-      this.showToolNote('点击「编辑」填写新角色设定')
+      this.showToolNote('点击右上「角色」可在侧边栏「角色」页填写设定')
     })
     overlay.querySelector('[data-act="free"]').addEventListener('click', () => overlay.remove())
   }
 }
 
 // ── 启动（defineContentScript main 内直接执行）──────────────────
-    // 开关：默认不启用 GAL（保持 DeepSeek 原版界面）；dsgpp_gal_enabled === '1' 才自动挂载舞台。
-    // 刷新/重新加载后保持上次选择，避免「用工具时一刷新又被 GAL 盖住」。
-    function isGalEnabled() {
-      return localStorage.getItem(STORAGE_ENABLED) === '1'
-    }
-    function setGalEnabled(on) {
-      try { localStorage.setItem(STORAGE_ENABLED, on ? '1' : '0') } catch { /* ignore */ }
-    }
-
+    // 开关权威在扩展设置（core/character GalSettings.enabled，默认 false = 保持
+    // DeepSeek 原版界面）。页面只读扩展状态；刷新/重载后保持上次选择。
     let entryButton = null
     function syncEntryButtonLabel() {
       if (!entryButton) return
-      entryButton.textContent = isGalEnabled() ? '🎭 关闭 GAL' : '🎭 GAL 酒馆'
+      entryButton.textContent = galEnabled() ? '🎭 关闭 GAL' : '🎭 GAL 酒馆'
     }
     // 舞台可见时隐藏右下角入口（避免盖住 GAL 输入区）；原版界面/卸载时显示。
     function syncEntryVisibility() {
@@ -1246,16 +1203,16 @@ class GalStage {
       const visible = !!(stage && stage.el && stage.el.style.display !== 'none')
       entryButton.style.display = visible ? 'none' : 'flex'
     }
-    // 常驻入口：页面右下角小按钮，负责「开/关 GAL 舞台」并持久化选择。
+    // 常驻入口：页面右下角小按钮，负责「开/关 GAL 舞台」并持久化选择（写扩展设置）。
     function ensureEntryButton() {
       if (entryButton && document.documentElement.contains(entryButton)) return
       const btn = document.createElement('button')
       btn.id = 'dsgpp-gal-entry'
-      btn.textContent = isGalEnabled() ? '🎭 关闭 GAL' : '🎭 GAL 酒馆'
+      btn.textContent = galEnabled() ? '🎭 关闭 GAL' : '🎭 GAL 酒馆'
       btn.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;padding:8px 16px;border:1px solid rgba(143,123,255,.55);border-radius:20px;background:rgba(13,16,32,.94);color:#e6e9f4;font-size:13px;line-height:1;cursor:pointer;font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.45)'
-      btn.addEventListener('click', () => {
-        const nextOn = !isGalEnabled()
-        setGalEnabled(nextOn)
+      btn.addEventListener('click', async () => {
+        const nextOn = !galEnabled()
+        await setGalEnabledRemote(nextOn)
         if (nextOn) mountGal()
         else unmountGal()
         syncEntryButtonLabel()
@@ -1275,7 +1232,6 @@ class GalStage {
       host.id = 'dsgpp-gal-root'
       document.documentElement.appendChild(host)
       const shadow = host.attachShadow({ mode: 'open' })
-      initPresetCadence()
       window.__galStage = new GalStage(shadow)
       if (typeof ResizeObserver !== 'undefined') {
         new ResizeObserver(() => window.__galStage && window.__galStage.measure()).observe(document.body)
@@ -1293,9 +1249,17 @@ class GalStage {
       syncEntryButtonLabel()
       syncEntryVisibility()
     }
-    function install() {
+    // 扩展内「停用」入口：写回扩展设置关闭 GAL（下次刷新不自动打开）
+    async function disableGalFromStage() {
+      await setGalEnabledRemote(false)
+      unmountGal()
+    }
+    async function install() {
+      // 1) 一次性迁移旧 localStorage 数据（角色卡/开关）到扩展库
+      await migrateLegacyGalData()
+      // 2) 初始化入口按钮；仅当扩展设置启用时挂载舞台
       ensureEntryButton()
-      if (isGalEnabled()) mountGal()
+      if (galEnabled()) mountGal()
     }
 
     // ── 新对话开始前自动弹模式选择器 ──────────────────────────────

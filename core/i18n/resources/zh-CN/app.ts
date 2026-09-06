@@ -11,5 +11,6 @@ export const app = {
     preset: '预设',
     automation: '自动化',
     settings: '设置',
+    characters: '角色',
   },
 } as const;

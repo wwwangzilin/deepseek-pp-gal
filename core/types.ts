@@ -534,6 +534,48 @@ export interface SystemPromptPreset {
   characterId?: string;
 }
 
+/** GAL role card cadence for character persona injection. */
+export type GalCharacterCadence = 'first_message' | 'every_message' | 'off';
+
+/**
+ * GAL character card: a first-class, independently stored role entity.
+ * Kept out of the SystemPromptPreset store on purpose: activating a character
+ * must never overwrite the user's active preset selection, and vice versa.
+ */
+export interface GalCharacter {
+  id: string;
+  name: string;
+  color?: string;
+  avatar?: string;
+  description?: string;
+  personality?: string;
+  scenario?: string;
+  exampleDialogue?: string;
+  greeting?: string;
+  systemPrompt?: string;
+  memoryTags?: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type NewGalCharacter = Omit<GalCharacter, 'id' | 'createdAt' | 'updatedAt'> & {
+  id?: string;
+};
+
+/** GAL stage & persona-injection settings (extension-owned, single authority). */
+export interface GalSettings {
+  /** false = DeepSeek original UI by default (never auto-mounts the stage unless enabled). */
+  enabled: boolean;
+  /** How often the active character persona is injected into requests. */
+  characterCadence: GalCharacterCadence;
+}
+
+/** Broadcast payload for character / GAL settings state changes. */
+export interface GalCharacterState {
+  activeCharacter: GalCharacter | null;
+  settings: GalSettings;
+}
+
 export interface DeepSeekRequest {
   chat_session_id: string;
   model_type: string;
@@ -582,6 +624,13 @@ export type MessageAction =
   | { type: 'DELETE_PRESET'; payload: { id: string } }
   | { type: 'SET_ACTIVE_PRESET'; payload: { id: string | null } }
   | { type: 'GET_ACTIVE_PRESET' }
+  | { type: 'GET_CHARACTERS' }
+  | { type: 'SAVE_CHARACTER'; payload: NewGalCharacter }
+  | { type: 'DELETE_CHARACTER'; payload: { id: string } }
+  | { type: 'GET_ACTIVE_CHARACTER' }
+  | { type: 'SET_ACTIVE_CHARACTER'; payload: { id: string | null } }
+  | { type: 'GET_GAL_SETTINGS' }
+  | { type: 'SAVE_GAL_SETTINGS'; payload: Partial<GalSettings> }
   | { type: 'GET_PROMPT_INJECTION_SETTINGS' }
   | { type: 'SAVE_PROMPT_INJECTION_SETTINGS'; payload: Partial<PromptInjectionSettingsType> }
   | { type: 'GET_SKILL_AUTO_ACTIVATION_SETTINGS' }

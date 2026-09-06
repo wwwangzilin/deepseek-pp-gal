@@ -12,8 +12,10 @@ import { selectImplicitSkill, type LocalSkillIndex } from '../skill/local-skill-
 import { absolutizeSkillReferences, joinUnderRoot } from '../skill/local-path-rewriter';
 import { DEFAULT_SKILL_AUTO_ACTIVATION_SETTINGS, type SkillAutoActivationSettings } from '../skill/auto-activation-settings';
 import { projectToolDescriptorsForNativeSearch, filterRetiredModelFacingTools } from '../tool';
-import type { Memory, ModelType, Skill, SystemPromptPreset, ToolDescriptor } from '../types';
+import type { Memory, ModelType, Skill, SystemPromptPreset, ToolDescriptor, GalCharacter, GalCharacterCadence } from '../types';
 import { filterMemoriesForInjection } from '../memory/scope';
+import { buildCharacterPersona } from '../character/persona';
+import { DEFAULT_GAL_SETTINGS } from '../character/codec';
 import {
   normalizeDeepSeekMessageId,
   type DeepSeekAugmentableWebRoute,
@@ -30,6 +32,10 @@ export interface RequestAugmentationState {
     Partial<Pick<Skill, 'source' | 'description' | 'remote'>>
   >;
   activePreset: SystemPromptPreset | null;
+  /** Active GAL character (synced from CHARACTER_STATE_UPDATED in content.ts). */
+  activeCharacter?: GalCharacter | null;
+  /** GAL persona injection cadence (GalSettings.characterCadence). */
+  galCadence?: GalCharacterCadence;
   projectContext?: string | null;
   projectId?: string | null;
   modelType: ModelType;
@@ -175,13 +181,32 @@ export function augmentDecodedRequestBody(
   const isFirstMessage = body.parent_message_id === null || body.parent_message_id === undefined;
   const messageCount = isFirstMessage ? 1 : state.messageCount + 1;
   const promptSettings = normalizePromptInjectionSettings(state.promptSettings ?? DEFAULT_PROMPT_INJECTION_SETTINGS);
-  const shouldInjectPreset = shouldInjectPresetForTurn({
-    hasActivePreset: Boolean(state.activePreset),
-    isFirstMessage,
-    messageCount,
-    cadence: promptSettings.presetCadence,
-  });
-  const presetContent = shouldInjectPreset ? state.activePreset!.content : null;
+  const activeCharacter = state.activeCharacter ?? null;
+  // Memory/character filtering scope: the active GAL character wins; the
+  // legacy preset-carried characterId (gal-char-* presets) stays supported.
+  const activeCharacterId = activeCharacter?.id
+    ?? state.activePreset?.characterId
+    ?? null;
+
+  // Single persona source per request: while a GAL character is active its
+  // persona is injected (per GalSettings.characterCadence) and the user's
+  // active preset is NOT injected — the character replaces the preset for the
+  // request without ever overwriting the stored active-preset selection.
+  let presetContent: string | null = null;
+  if (activeCharacter) {
+    const characterCadence = state.galCadence ?? DEFAULT_GAL_SETTINGS.characterCadence;
+    const shouldInjectCharacter = characterCadence === 'every_message'
+      || (characterCadence === 'first_message' && isFirstMessage);
+    if (shouldInjectCharacter) presetContent = buildCharacterPersona(activeCharacter);
+  } else {
+    const shouldInjectPreset = shouldInjectPresetForTurn({
+      hasActivePreset: Boolean(state.activePreset),
+      isFirstMessage,
+      messageCount,
+      cadence: promptSettings.presetCadence,
+    });
+    if (shouldInjectPreset) presetContent = state.activePreset!.content;
+  }
   const forceResponseLanguage = promptSettings.forceResponseLanguage === 'auto'
     ? null
     : promptSettings.forceResponseLanguage;
@@ -236,7 +261,7 @@ export function augmentDecodedRequestBody(
     const scopedMemories = filterMemoriesForInjection(
       state.memories,
       state.projectId,
-      state.activePreset?.characterId ?? null,
+      activeCharacterId,
     );
     const isLocalIndexActivated = activeLocalSkillDir !== undefined;
 
@@ -295,7 +320,7 @@ export function augmentDecodedRequestBody(
     memories: filterMemoriesForInjection(
       state.memories,
       state.projectId,
-      state.activePreset?.characterId ?? null,
+      activeCharacterId,
     ),
     thinkingEnabled,
     presetContent,

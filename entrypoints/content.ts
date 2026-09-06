@@ -1,6 +1,8 @@
 import type {
   BackgroundConfig,
   DeepSeekTheme,
+  GalCharacter,
+  GalSettings,
   Memory,
   ModelType,
   PetConfig,
@@ -36,6 +38,11 @@ import {
 } from "../core/background/styles";
 import { decodePersistedMemoryRecord } from "../core/memory/codec";
 import { decodeActivePreset } from "../core/preset/codec";
+import {
+  decodeGalCharacter,
+  normalizeGalSettings,
+  DEFAULT_GAL_SETTINGS,
+} from "../core/character/codec";
 import { decodeSkillLibrary } from "../core/skill/codec";
 import {
   decodeRuntimeResponse,
@@ -541,6 +548,8 @@ let currentMemories: Memory[] = [];
 let currentSkills: Skill[] = [];
 let currentActivePreset: SystemPromptPreset | null = null;
 let currentModelType: ModelType = null;
+let currentActiveCharacter: GalCharacter | null = null;
+let currentGalSettings: GalSettings = { ...DEFAULT_GAL_SETTINGS };
 let currentPromptSettings: PromptInjectionSettings =
   DEFAULT_PROMPT_INJECTION_SETTINGS;
 let currentSkillAutoActivation: SkillAutoActivationSettings =
@@ -1426,6 +1435,18 @@ function handleContentRuntimeMessage(
     } catch (error) {
       console.error("[DeepSeek++] memory state update rejected", error);
     }
+  } else if (message.type === "CHARACTER_STATE_UPDATED") {
+    try {
+      currentActiveCharacter = message.activeCharacter == null
+        ? null
+        : decodeGalCharacter(message.activeCharacter, "characterStateUpdate.activeCharacter");
+      currentGalSettings = normalizeGalSettings(
+        message.settings ?? {},
+        "characterStateUpdate.settings",
+      );
+    } catch (error) {
+      console.error("[DeepSeek++] character state update rejected", error);
+    }
   } else if (message.type === "TOOL_DESCRIPTORS_UPDATED") {
     const syncLease = toolDescriptorSyncGate.begin();
     try {
@@ -1648,6 +1669,8 @@ async function handleAugmentRequestBody(data: {
       memories: currentMemories,
       skills: currentSkills,
       activePreset: currentActivePreset,
+      activeCharacter: currentActiveCharacter,
+      galCadence: currentGalSettings.characterCadence,
       projectContext: project?.context ?? null,
       projectId: project?.projectId ?? null,
       modelType: currentModelType,

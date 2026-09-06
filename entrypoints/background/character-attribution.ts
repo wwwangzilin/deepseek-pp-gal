@@ -1,5 +1,5 @@
 import type { NewMemory } from '../../core/types';
-import { getActivePreset } from '../../core/preset/store';
+import { getActiveCharacter } from '../../core/character/store';
 
 /**
  * Attributes memories that the model auto-consolidates to the currently
@@ -10,16 +10,13 @@ import { getActivePreset } from '../../core/preset/store';
  *   character automatically (memory follows the character);
  * - memories added manually from the sidepanel / GAL UI do not go through
  *   here — the caller states ownership explicitly;
- * - when no character-bound preset is active (plain deepseek-pp mode) the
- *   memory is returned unchanged.
+ * - when no character is active (plain deepseek-pp mode) the memory is
+ *   returned unchanged.
  */
 export async function attributeMemoryToActiveCharacter(
   memory: NewMemory,
 ): Promise<NewMemory> {
-  const preset = await getActivePreset();
-  const characterId = preset?.characterId && preset.characterId.trim() !== ''
-    ? preset.characterId.trim()
-    : null;
-  if (!characterId) return memory;
-  return { ...memory, characterId };
+  const character = await getActiveCharacter();
+  if (!character?.id) return memory;
+  return { ...memory, characterId: character.id };
 }

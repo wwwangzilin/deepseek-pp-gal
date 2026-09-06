@@ -40,6 +40,15 @@ import {
   stageDeletePresetAlreadyLocked,
 } from '../core/preset/store';
 import { getModelType, setModelType } from '../core/model/store';
+import {
+  deleteCharacter,
+  getAllCharacters,
+  getActiveCharacter,
+  getGalSettings,
+  saveCharacter,
+  saveGalSettings,
+  setActiveCharacterId,
+} from '../core/character/store';
 import { getDeepSeekTheme, saveDeepSeekTheme } from '../core/theme/store';
 import { getBackgroundConfig, saveBackgroundConfig, clearBackgroundConfig } from '../core/background/store';
 import { getPetConfig, savePetConfig, clearPetConfig } from '../core/pet/store';
@@ -473,6 +482,14 @@ const runtimeCommandRegistry = createRuntimeCommandRegistry({
         broadcastStateUpdate,
         broadcastSavedItemsUpdate,
         broadcastVoiceSettingsUpdate,
+        getAllCharacters,
+        saveCharacter,
+        deleteCharacter,
+        getActiveCharacter,
+        setActiveCharacterId,
+        getGalSettings,
+        saveGalSettings,
+        broadcastCharacterState,
       },
       project: {
         getProjectContextState,
@@ -1191,6 +1208,17 @@ async function broadcastSavedItemsUpdate(excludeTabId?: number) {
 async function broadcastVoiceSettingsUpdate(excludeTabId?: number) {
   const voiceSettings = await getVoiceSettings();
   await broadcastToTabs({ type: 'VOICE_SETTINGS_UPDATED', voiceSettings }, excludeTabId);
+}
+
+async function broadcastCharacterState(excludeTabId?: number) {
+  const [activeCharacter, settings] = await Promise.all([
+    getActiveCharacter(),
+    getGalSettings(),
+  ]);
+  await broadcastToTabs(
+    { type: 'CHARACTER_STATE_UPDATED', activeCharacter, settings },
+    excludeTabId,
+  );
 }
 
 async function broadcastAutomationUpdate(excludeTabId?: number) {

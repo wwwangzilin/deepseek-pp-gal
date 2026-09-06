@@ -182,7 +182,7 @@ describe('runtime sender and envelope boundary', () => {
   it('authorizes only the frozen content command surface before routing', () => {
     const extensionContext = createRuntimeMessageContext(EXTENSION_SENDER, POLICY);
     const contentContext = createRuntimeMessageContext(DEEPSEEK_SENDER, POLICY);
-    expect(DEEPSEEK_CONTENT_RUNTIME_COMMANDS.size).toBe(31);
+    expect(DEEPSEEK_CONTENT_RUNTIME_COMMANDS.size).toBe(41);
     expect(() => authorizeRuntimeMessage({ type: 'GET_MEMORIES' }, contentContext)).not.toThrow();
     expect(() => authorizeRuntimeMessage({ type: 'GET_SYNC_CONFIG' }, contentContext))
       .toThrow('not authorized for DeepSeek content');
@@ -192,6 +192,7 @@ describe('runtime sender and envelope boundary', () => {
   it('matches the exact command literals emitted by DeepSeek content producers', () => {
     const producerFiles = [
       'entrypoints/content.ts',
+      'entrypoints/gal-view.content.ts',
       'entrypoints/content/adapters/project-sidebar-organizer.ts',
       'core/ui/tool-result-renderer.ts',
     ];
@@ -271,18 +272,26 @@ function extractContentRuntimeCommands(path: string): string[] {
   const commands: string[] = [];
 
   walkSourceAst(program, (node) => {
-    if (t.isCallExpression(node) && isContentRuntimeSend(node.callee)) {
-      const [message] = node.arguments;
-      if (t.isObjectExpression(message)) {
-        for (const property of message.properties) {
-          if (
-            t.isObjectProperty(property)
-            && !property.computed
-            && t.isIdentifier(property.key, { name: 'type' })
-            && t.isStringLiteral(property.value)
-          ) {
-            commands.push(property.value.value);
-          }
+    if (!t.isCallExpression(node)) return;
+    const callee = node.callee;
+    const isChromeSend = isContentRuntimeSend(callee);
+    const isLocalCommandSend = t.isIdentifier(callee) && callee.name === 'runtimeSend';
+    if (!isChromeSend && !isLocalCommandSend) return;
+    const [message] = node.arguments;
+    if (isLocalCommandSend) {
+      // GAL overlay helper: runtimeSend('COMMAND', payload) — string literal form.
+      if (t.isStringLiteral(message)) commands.push(message.value);
+      return;
+    }
+    if (t.isObjectExpression(message)) {
+      for (const property of message.properties) {
+        if (
+          t.isObjectProperty(property)
+          && !property.computed
+          && t.isIdentifier(property.key, { name: 'type' })
+          && t.isStringLiteral(property.value)
+        ) {
+          commands.push(property.value.value);
         }
       }
     }

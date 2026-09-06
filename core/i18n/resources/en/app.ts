@@ -11,5 +11,6 @@ export const app = {
     preset: 'Presets',
     automation: 'Automation',
     settings: 'Settings',
+    characters: 'Characters',
   },
 } as const;

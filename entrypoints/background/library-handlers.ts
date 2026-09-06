@@ -3,6 +3,9 @@ import {
   type RuntimeCommandHandler,
 } from '../../core/messaging/runtime-command-registry';
 import type {
+  GalCharacter,
+  GalSettings,
+  NewGalCharacter,
   SavedItem,
   SavedItemInput,
   SystemPromptPreset,
@@ -36,6 +39,14 @@ export interface LibraryRuntimeHandlerDependencies {
   broadcastStateUpdate(excludeTabId?: number): Promise<void>;
   broadcastSavedItemsUpdate(excludeTabId?: number): Promise<void>;
   broadcastVoiceSettingsUpdate(excludeTabId?: number): Promise<void>;
+  getAllCharacters(): Promise<GalCharacter[]>;
+  saveCharacter(character: NewGalCharacter): Promise<GalCharacter>;
+  deleteCharacter(id: string): Promise<void>;
+  getActiveCharacter(): Promise<GalCharacter | null>;
+  setActiveCharacterId(id: string | null): Promise<void>;
+  getGalSettings(): Promise<GalSettings>;
+  saveGalSettings(settings: Partial<GalSettings>): Promise<GalSettings>;
+  broadcastCharacterState(excludeTabId?: number): Promise<void>;
 }
 
 export function createLibraryRuntimeHandlers(
@@ -108,5 +119,34 @@ export function createLibraryRuntimeHandlers(
     definePayloadlessRuntimeCommandHandler('GET_VOICE_CAPABILITIES', () => (
       dependencies.detectVoiceCapabilities()
     )),
+    definePayloadlessRuntimeCommandHandler('GET_CHARACTERS', () => (
+      dependencies.getAllCharacters()
+    )),
+    definePersistencePayloadRuntimeCommandHandler('SAVE_CHARACTER', async (character, context) => {
+      const saved = await dependencies.saveCharacter(character);
+      await dependencies.broadcastCharacterState(context.tabId);
+      return saved;
+    }),
+    definePersistencePayloadRuntimeCommandHandler('DELETE_CHARACTER', async (payload, context) => {
+      await dependencies.deleteCharacter(payload.id);
+      await dependencies.broadcastCharacterState(context.tabId);
+      return { ok: true as const };
+    }),
+    definePayloadlessRuntimeCommandHandler('GET_ACTIVE_CHARACTER', () => (
+      dependencies.getActiveCharacter()
+    )),
+    definePersistencePayloadRuntimeCommandHandler('SET_ACTIVE_CHARACTER', async (payload, context) => {
+      await dependencies.setActiveCharacterId(payload.id);
+      await dependencies.broadcastCharacterState(context.tabId);
+      return { ok: true as const };
+    }),
+    definePayloadlessRuntimeCommandHandler('GET_GAL_SETTINGS', () => (
+      dependencies.getGalSettings()
+    )),
+    definePersistencePayloadRuntimeCommandHandler('SAVE_GAL_SETTINGS', async (settings, context) => {
+      const saved = await dependencies.saveGalSettings(settings);
+      await dependencies.broadcastCharacterState(context.tabId);
+      return saved;
+    }),
   ]);
 }

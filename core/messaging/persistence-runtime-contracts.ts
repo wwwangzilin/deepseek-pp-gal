@@ -3,6 +3,8 @@ import type {
   BackgroundConfig,
   CurrentDeepSeekConversation,
   DeepSeekTheme,
+  GalCharacter,
+  GalSettings,
   GitHubSkillImportResult,
   GitHubSkillPreview,
   GitHubSkillSource,
@@ -153,6 +155,34 @@ export interface PersistenceRuntimeCommandContracts {
   GET_ACTIVE_PRESET: {
     request: DeclaredRuntimeRequest<'GET_ACTIVE_PRESET'>;
     response: SystemPromptPreset | null;
+  };
+  GET_CHARACTERS: {
+    request: DeclaredRuntimeRequest<'GET_CHARACTERS'>;
+    response: GalCharacter[];
+  };
+  SAVE_CHARACTER: {
+    request: DeclaredRuntimeRequest<'SAVE_CHARACTER'>;
+    response: GalCharacter;
+  };
+  DELETE_CHARACTER: {
+    request: DeclaredRuntimeRequest<'DELETE_CHARACTER'>;
+    response: Ack;
+  };
+  GET_ACTIVE_CHARACTER: {
+    request: DeclaredRuntimeRequest<'GET_ACTIVE_CHARACTER'>;
+    response: GalCharacter | null;
+  };
+  SET_ACTIVE_CHARACTER: {
+    request: DeclaredRuntimeRequest<'SET_ACTIVE_CHARACTER'>;
+    response: Ack;
+  };
+  GET_GAL_SETTINGS: {
+    request: DeclaredRuntimeRequest<'GET_GAL_SETTINGS'>;
+    response: GalSettings;
+  };
+  SAVE_GAL_SETTINGS: {
+    request: DeclaredRuntimeRequest<'SAVE_GAL_SETTINGS'>;
+    response: GalSettings;
   };
   GET_PROMPT_INJECTION_SETTINGS: {
     request: DeclaredRuntimeRequest<'GET_PROMPT_INJECTION_SETTINGS'>;
