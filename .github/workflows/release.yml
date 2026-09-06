@@ -77,6 +77,9 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
+          # GAL fork：不发布上游 npm 包 deepseek-pp-shell-host
+          # （避免占用上游包名空间 / 依赖上游仓库的 NPM_TOKEN secret），直接跳过。
+          exit 0
           TAG="${INPUT_TAG:-${GITHUB_REF_NAME}}"
           VERSION="${TAG#v}"
           ROOT_VERSION="$(node -p "require('./package.json').version")"
