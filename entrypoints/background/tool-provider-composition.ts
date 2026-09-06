@@ -34,6 +34,11 @@ import {
   shouldExposeBrowserControlTools,
 } from '../../core/browser-control/tool';
 import {
+  GAL_CHARACTER_TOOL_PROVIDER,
+  createGalCharacterToolDescriptors,
+  executeGalCharacterToolCall,
+} from '../../core/character/tool';
+import {
   createMemoryToolDescriptors,
   executeMemoryToolCall,
   MEMORY_TOOL_PROVIDER,
@@ -106,6 +111,11 @@ export function createProductionToolProviderRegistry(): ToolProviderRegistry {
       SKILL_CREATOR_TOOL_PROVIDER.id,
       ({ locale }) => createSkillCreatorToolDescriptors(locale),
       (call, _descriptor, { locale }) => executeSkillCreatorToolCall(call, locale),
+    ),
+    createLocalProvider(
+      GAL_CHARACTER_TOOL_PROVIDER.id,
+      ({ locale }) => createGalCharacterToolDescriptors(locale),
+      (call, _descriptor, { locale }) => executeGalCharacterToolCall(call, locale),
     ),
     createLocalProvider(
       MEMORY_IMPORT_TOOL_PROVIDER.id,

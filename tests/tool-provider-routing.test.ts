@@ -84,6 +84,7 @@ describe('tool provider routing', () => {
       'artifact_create',
       'artifact_bundle_create',
       'skill_draft_create',
+      'gal_character_upsert',
       'memory_import_preview',
       'mcp_discover',
       'mcp_describe',
