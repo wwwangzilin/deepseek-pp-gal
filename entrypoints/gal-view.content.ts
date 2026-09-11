@@ -27,7 +27,7 @@ const STORAGE_ENABLED = 'dsgpp_gal_enabled'
 // localStorage；本页面只维护一份同步缓存供舞台渲染，写操作即时转发后台。
 let __galChars = []
 let __galActiveId = null
-let __galSettings = { enabled: false, characterCadence: 'every_message' }
+let __galSettings = { enabled: false, characterCadence: 'every_message', proactiveEnabled: false, proactiveIdleMinutes: 10 }
 let __galGroups = []
 let __galActiveGroupId = null
 
@@ -57,10 +57,41 @@ async function refreshGalData() {
       enabled: settings.enabled === true,
       characterCadence: settings.characterCadence === 'first_message' || settings.characterCadence === 'off'
         ? settings.characterCadence : 'every_message',
+      proactiveEnabled: settings.proactiveEnabled === true,
+      proactiveIdleMinutes: typeof settings.proactiveIdleMinutes === 'number'
+        ? Math.max(1, Math.min(240, Math.round(settings.proactiveIdleMinutes)))
+        : 10,
     }
   }
   if (Array.isArray(groups)) __galGroups = groups
   __galActiveGroupId = activeGroup && activeGroup.id ? activeGroup.id : null
+}
+
+// ── 剧情存档（gal 专属，直接存扩展 storage，不经 background）────────
+const GAL_SAVES_KEY = 'deepseek_pp_gal_saves'
+const GAL_SAVES_LIMIT = 20
+
+function galStorageGet(key) {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get(key, (data) => {
+        if (chrome.runtime.lastError) { resolve(undefined); return }
+        resolve(data ? data[key] : undefined)
+      })
+    } catch { resolve(undefined) }
+  })
+}
+function galStorageSet(key, value) {
+  return new Promise((resolve) => {
+    try { chrome.storage.local.set({ [key]: value }, () => resolve(true)) } catch { resolve(false) }
+  })
+}
+async function loadGalSaves() {
+  const raw = await galStorageGet(GAL_SAVES_KEY)
+  return Array.isArray(raw) ? raw : []
+}
+async function persistGalSaves(saves) {
+  await galStorageSet(GAL_SAVES_KEY, saves.slice(0, GAL_SAVES_LIMIT))
 }
 
 // ── 群组（借用项目做共享上下文载体）──────────────────────────────
@@ -653,6 +684,7 @@ class GalStage {
     this.speakerIds = []
     this.queueRunning = false
     this._turnResolve = null
+    this._lastActivityAt = Date.now()
 
     this.render()
     this.onCharacterChanged()
@@ -754,6 +786,7 @@ class GalStage {
         <button class="g-btn" data-act="chars">角色</button>
         <button class="g-btn" data-act="groups">👥 ${escapeHtml(getActiveGroup() ? getActiveGroup().name : '群组')}</button>
         <button class="g-btn g-btn-accent" data-act="pick">🎭 选模式</button>
+        <button class="g-btn" data-act="saves">💾 存档</button>
         <button class="g-btn" data-act="original">原版界面</button>
         <button class="g-btn" data-act="disable" title="关闭 GAL 舞台并记住选择（下次刷新不自动打开）">⏻ 关闭 GAL</button>
       </div>`
@@ -766,6 +799,7 @@ class GalStage {
       if (!btn) return
       if (btn.dataset.act === 'chars') this.togglePanel('chars')
       else if (btn.dataset.act === 'groups') this.togglePanel('groups')
+      else if (btn.dataset.act === 'saves') this.togglePanel('saves')
       else if (btn.dataset.act === 'pick') this.showModePicker()
       else if (btn.dataset.act === 'original') this.toggleView()
       else if (btn.dataset.act === 'disable') disableGalFromStage()
@@ -857,6 +891,7 @@ class GalStage {
     if (this.running || this.queueRunning) return
     const text = this.inputBox ? this.inputBox.value.trim() : ''
     if (!text) return
+    this._lastActivityAt = Date.now()
     // RP 意图自动识别：检测到角色扮演设定请求 → 弹出保存为模式卡
     if (detectRoleplayIntent(text)) {
       this.offerSaveRoleplayMode(text)
@@ -1049,6 +1084,26 @@ class GalStage {
     }).join('')
   }
 
+  /** 空闲时角色主动搭话（由 startProactiveLoop 触发） */
+  async triggerProactive() {
+    if (this.running || this.queueRunning) return
+    this._lastActivityAt = Date.now()
+    const group = getActiveGroup()
+    const pool = group ? groupMembers(group) : [getActiveCharacter()].filter(Boolean)
+    if (pool.length === 0) return
+    const speaker = pool[Math.floor(Math.random() * pool.length)]
+    if (speaker.id !== __galActiveId) {
+      await setActiveCharacterRemote(speaker.id)
+      this.renderTopbar()
+      await new Promise((r) => setTimeout(r, 500))
+    }
+    this.updateStageContent()
+    this.showToolNote('💭 ' + speaker.name + ' 主动开口了…')
+    const reply = await this.sendTurn('（你主动找主人搭话：自然开启一个新话题，一两句就好，不要提这条提示）', false)
+    await appendGroupEvent(group, speaker.name, reply)
+    this._lastActivityAt = Date.now()
+  }
+
   startLoop() {
     if (this._raf) return
     const loop = (now) => {
@@ -1082,6 +1137,7 @@ class GalStage {
         this.setLine('assistant', clean)
         this.running = false
         this._sentAt = null
+        this._lastActivityAt = Date.now()
         this.syncToolActivity(true)
         void this.bumpAffinity()
         this.finishTurn(clean)
@@ -1331,6 +1387,84 @@ class GalStage {
     })
   }
 
+  /** 剧情存档面板：保存当前舞台剧情 / 读档 / 删除 */
+  async renderSavesPanel(panel) {
+    const saves = await loadGalSaves()
+    const active = getActiveCharacter()
+    const group = getActiveGroup()
+    panel.innerHTML = `
+      <div class="g-panel-head"><span>💾 剧情存档</span><button class="g-btn" data-close="1">关闭</button></div>
+      <div class="g-panel-body">
+        <div style="font-size:11px;color:#98a1c2;line-height:1.55;margin-bottom:8px">
+          存档记录舞台剧情与角色/群组状态；读档会回到该剧情点（DeepSeek 服务端会话历史不会被回滚）。
+        </div>
+        <input class="g-input2" data-f="name" placeholder="存档名（默认「${escapeHtml(active ? active.name : '剧情')} · 存档')">
+        <div class="g-btn-row">
+          <button class="g-btn g-btn-accent" data-act="save-now">保存当前剧情</button>
+        </div>
+        ${saves.length === 0
+          ? '<div style="font-size:11px;color:#8f9bbd;padding:8px 0">还没有存档。</div>'
+          : saves.map((save) => `
+          <div class="g-card" data-save="${escapeHtml(save.id)}">
+            <div class="g-card-name">${escapeHtml(save.name || '未命名存档')}</div>
+            <div class="g-card-desc">${escapeHtml(new Date(save.createdAt || 0).toLocaleString())}${save.groupId ? ' · 群组' : ''} · ${Array.isArray(save.lines) ? save.lines.length : 0} 条</div>
+            <div class="g-btn-row">
+              <button class="g-btn" data-act="load">读档</button>
+              <button class="g-btn" data-act="del">删除</button>
+            </div>
+          </div>`).join('')}
+      </div>`
+    panel.querySelector('[data-close]').addEventListener('click', () => this.closePanel())
+    panel.querySelector('[data-act="save-now"]').addEventListener('click', async () => {
+      const rawName = (panel.querySelector('[data-f="name"]').value || '').trim()
+      const name = rawName || ((active ? active.name : '剧情') + ' · 存档')
+      const savesNow = await loadGalSaves()
+      const entry = {
+        id: 'save-' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36),
+        name,
+        characterId: active ? active.id : null,
+        groupId: group ? group.id : null,
+        speakerIds: Array.isArray(this.speakerIds) ? this.speakerIds.slice() : [],
+        lines: Array.isArray(this.lines) ? this.lines.slice(-40) : [],
+        createdAt: Date.now(),
+      }
+      await persistGalSaves([entry, ...savesNow])
+      this.showToolNote('💾 已保存剧情「' + name + '」')
+      this.renderSavesPanel(panel)
+    })
+    panel.querySelectorAll('[data-save]').forEach((card) => {
+      const saveId = card.dataset.save
+      const load = card.querySelector('[data-act="load"]')
+      const del = card.querySelector('[data-act="del"]')
+      if (load) load.addEventListener('click', async () => {
+        const savesNow = await loadGalSaves()
+        const save = savesNow.find((item) => item && item.id === saveId)
+        if (!save) return
+        await this.applySave(save)
+        this.closePanel()
+      })
+      if (del) del.addEventListener('click', async () => {
+        const savesNow = await loadGalSaves()
+        await persistGalSaves(savesNow.filter((item) => item && item.id !== saveId))
+        this.renderSavesPanel(panel)
+      })
+    })
+  }
+
+  /** 读档：恢复角色/群组/发言者与舞台剧情显示 */
+  async applySave(save) {
+    if (!save) return
+    await setActiveGroupRemote(save.groupId || null)
+    if (save.characterId) await setActiveCharacterRemote(save.characterId)
+    this.speakerIds = Array.isArray(save.speakerIds) ? save.speakerIds.slice() : []
+    this.lines = Array.isArray(save.lines) ? save.lines.slice() : []
+    const lastAssistant = [...this.lines].reverse().find((line) => line && line.kind === 'assistant')
+    if (lastAssistant) this.setLine('assistant', lastAssistant.text)
+    this.renderTopbar()
+    this.updateStageContent()
+    this.showToolNote('📂 已读档「' + (save.name || '未命名存档') + '」（服务端会话历史不变）')
+  }
+
   onCharacterChanged() {
     const char = getActiveCharacter()
     this.lines = []
@@ -1365,6 +1499,7 @@ class GalStage {
     panel.className = 'g-panel'
     if (name === 'chars') this.renderCharsPanel(panel)
     else if (name === 'groups') this.renderGroupPanel(panel)
+    else if (name === 'saves') void this.renderSavesPanel(panel)
     this.el.append(panel)
   }
   closePanel() {
@@ -1625,6 +1760,26 @@ class GalStage {
       // 2) 初始化入口按钮；仅当扩展设置启用时挂载舞台
       ensureEntryButton()
       if (galEnabled()) mountGal()
+      // 3) 空闲主动搭话轮询（设置开启时生效）
+      startProactiveLoop()
+    }
+
+    /** 空闲轮询：舞台打开且长时间无互动时让角色主动开口 */
+    function startProactiveLoop() {
+      if (window.__galProactiveTimer) return
+      window.__galProactiveTimer = setInterval(() => {
+        try {
+          const stage = window.__galStage
+          if (!stage || !galEnabled()) return
+          if (__galSettings.proactiveEnabled !== true) return
+          if (document.hidden) return
+          if (stage.running || stage.queueRunning) return
+          const idleMs = Date.now() - (stage._lastActivityAt || 0)
+          const needMs = (__galSettings.proactiveIdleMinutes || 10) * 60000
+          if (idleMs < needMs) return
+          void stage.triggerProactive()
+        } catch { /* ignore */ }
+      }, 45000)
     }
 
     // ── 新对话开始前自动弹模式选择器 ──────────────────────────────

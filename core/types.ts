@@ -570,6 +570,10 @@ export interface GalSettings {
   enabled: boolean;
   /** How often the active character persona is injected into requests. */
   characterCadence: GalCharacterCadence;
+  /** Let the active character start a conversation after an idle period. */
+  proactiveEnabled?: boolean;
+  /** Idle minutes before a proactive message fires. */
+  proactiveIdleMinutes?: number;
 }
 
 /** Broadcast payload for character / GAL settings state changes. */

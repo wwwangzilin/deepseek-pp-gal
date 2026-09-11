@@ -7,6 +7,8 @@ export const GAL_SETTINGS_STORAGE_SCHEMA_VERSION = 1 as const;
 export const DEFAULT_GAL_SETTINGS: GalSettings = {
   enabled: false,
   characterCadence: 'every_message',
+  proactiveEnabled: false,
+  proactiveIdleMinutes: 10,
 };
 
 export const galCharacterCollectionCodec: VersionedValueCodec<GalCharacter[]> = {
@@ -72,7 +74,18 @@ export function normalizeGalSettings(value: unknown, path = 'galSettings'): GalS
   const cadence = isGalCharacterCadence(object.characterCadence)
     ? object.characterCadence
     : DEFAULT_GAL_SETTINGS.characterCadence;
-  return { enabled, characterCadence: cadence };
+  const proactiveEnabled = typeof object.proactiveEnabled === 'boolean'
+    ? object.proactiveEnabled
+    : DEFAULT_GAL_SETTINGS.proactiveEnabled;
+  const rawIdle = typeof object.proactiveIdleMinutes === 'number' && Number.isFinite(object.proactiveIdleMinutes)
+    ? Math.round(object.proactiveIdleMinutes)
+    : DEFAULT_GAL_SETTINGS.proactiveIdleMinutes as number;
+  return {
+    enabled,
+    characterCadence: cadence,
+    proactiveEnabled,
+    proactiveIdleMinutes: Math.max(1, Math.min(240, rawIdle)),
+  };
 }
 
 export function isGalCharacterCadence(value: unknown): value is GalCharacterCadence {

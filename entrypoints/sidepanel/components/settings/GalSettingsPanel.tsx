@@ -113,6 +113,36 @@ export default function GalSettingsPanel() {
         </select>
       </div>
 
+      <label className="flex items-center justify-between gap-3 py-2 cursor-pointer">
+        <span className="text-[12px]" style={{ color: 'var(--ds-text)' }}>
+          {t('sidepanel.galSettings.proactiveLabel')}
+        </span>
+        <input
+          type="checkbox"
+          checked={settings.proactiveEnabled === true}
+          onChange={(event) => void save({ proactiveEnabled: event.target.checked })}
+        />
+      </label>
+      <p className="text-[11px]" style={{ color: 'var(--ds-text-secondary, #98a1c2)' }}>
+        {t('sidepanel.galSettings.proactiveHint')}
+      </p>
+      <div className="flex items-center justify-between gap-3 py-2">
+        <span className="text-[12px]" style={{ color: 'var(--ds-text)' }}>
+          {t('sidepanel.galSettings.proactiveMinutesLabel')}
+        </span>
+        <input
+          type="number"
+          min={1}
+          max={240}
+          value={settings.proactiveIdleMinutes ?? 10}
+          onChange={(event) => void save({
+            proactiveIdleMinutes: Math.max(1, Math.min(240, Number(event.target.value) || 10)),
+          })}
+          className="w-20 rounded border bg-transparent px-2 py-1 text-[12px]"
+          style={{ color: 'var(--ds-text)', borderColor: 'var(--ds-border, rgba(255,255,255,.15))' }}
+        />
+      </div>
+
       {statusMessage && (
         <p className="text-[11px]" style={{ color: 'var(--ds-text-secondary, #98a1c2)' }}>
           {statusMessage}

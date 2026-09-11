@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GalCharacter, GalCharacterCadence, GalGroup, GalSettings, Memory, NewGalCharacter, NewGalGroup } from '../../../core/types';
 import { decodeGalCharacter, decodeGalCharacterCollection } from '../../../core/character/codec';
+import { buildCharacterCardPng, parseCharacterCardFromPng } from '../../../core/character/card';
 import { decodeGalGroup, decodeGalGroupCollection } from '../../../core/group/codec';
 import PageIntro from '../components/PageIntro';
 import { SkeletonList } from '../components/settings/primitives';
@@ -47,8 +48,10 @@ export default function CharacterPage() {
   const [groupView, setGroupView] = useState<View>('list');
   const [editingGroup, setEditingGroup] = useState<GalGroup | null>(null);
   const [memoryCharacter, setMemoryCharacter] = useState<GalCharacter | null>(null);
+  const [diaryCharacter, setDiaryCharacter] = useState<GalCharacter | null>(null);
   const [statusMessage, setStatusMessage] = useState('');
   const fence = useRef(createRequestGenerationFence());
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const fail = useCallback((error: unknown) => {
     setStatusMessage(t('sidepanel.characterPage.operationFailed', {
@@ -211,6 +214,61 @@ export default function CharacterPage() {
     }
   };
 
+  /** 导入 SillyTavern 兼容的 PNG 角色卡（可多选） */
+  const handleImportCards = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const generation = fence.current.begin();
+    try {
+      let imported = 0;
+      for (const file of Array.from(files)) {
+        const buffer = await file.arrayBuffer();
+        const parsed = parseCharacterCardFromPng(new Uint8Array(buffer));
+        if (!parsed) continue;
+        await sidepanelRuntimeClient.request(
+          { type: 'SAVE_CHARACTER', payload: parsed.character },
+          {
+            unavailableMessage: t('sidepanel.characterPage.backendUnavailable'),
+            decode: (value) => decodeGalCharacter(value, 'importCharacterResponse'),
+          },
+        );
+        imported += 1;
+      }
+      if (!fence.current.isCurrent(generation)) return;
+      await load();
+      setStatusMessage(t('sidepanel.characterPage.importSuccess', { count: imported }));
+    } catch (error) {
+      if (!fence.current.isCurrent(generation)) return;
+      fail(error);
+    }
+  };
+
+  /** 导出为 PNG 角色卡（SillyTavern 可直接读） */
+  const handleExportCard = (character: GalCharacter) => {
+    try {
+      const png = buildCharacterCardPng(character);
+      const blob = new Blob([png.slice().buffer as ArrayBuffer], { type: 'image/png' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${character.name || 'character'}.png`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    } catch (error) {
+      fail(error);
+    }
+  };
+
+  if (diaryCharacter) {
+    return (
+      <CharacterDiary
+        character={diaryCharacter}
+        groups={groups}
+        onBack={() => setDiaryCharacter(null)}
+        t={tk}
+      />
+    );
+  }
+
   if (memoryCharacter) {
     return (
       <CharacterMemories
@@ -257,14 +315,34 @@ export default function CharacterPage() {
           ))}
         </div>
         {pageTab === 'characters' ? (
-          <button
-            type="button"
-            onClick={beginNew}
-            className="mt-2 rounded px-3 py-1.5 text-[12px] font-medium"
-            style={{ color: '#fff', background: 'linear-gradient(135deg,#8f7bff,#4f8cff)' }}
-          >
-            ＋ {t('sidepanel.characterPage.create')}
-          </button>
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              type="button"
+              onClick={beginNew}
+              className="rounded px-3 py-1.5 text-[12px] font-medium"
+              style={{ color: '#fff', background: 'linear-gradient(135deg,#8f7bff,#4f8cff)' }}
+            >
+              ＋ {t('sidepanel.characterPage.create')}
+            </button>
+            <button
+              type="button"
+              className="ds-btn text-[12px]"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              ⬆ {t('sidepanel.characterPage.importCard')}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png"
+              multiple
+              style={{ display: 'none' }}
+              onChange={(event) => {
+                void handleImportCards(event.target.files);
+                event.target.value = '';
+              }}
+            />
+          </div>
         ) : (
           <button
             type="button"
@@ -371,6 +449,12 @@ export default function CharacterPage() {
                       <button type="button" className="ds-btn text-[11px]" onClick={() => openMemory(character)}>
                         {t('sidepanel.characterPage.memoryAction')}
                       </button>
+                      <button type="button" className="ds-btn text-[11px]" onClick={() => setDiaryCharacter(character)}>
+                        {t('sidepanel.characterPage.diaryAction')}
+                      </button>
+                      <button type="button" className="ds-btn text-[11px]" onClick={() => handleExportCard(character)}>
+                        {t('sidepanel.characterPage.exportCard')}
+                      </button>
                       <button
                         type="button"
                         className="ds-btn text-[11px]"
@@ -404,6 +488,158 @@ const GROUP_EMPTY: Omit<GalGroup, 'id' | 'createdAt' | 'updatedAt' | 'projectId'
   instructions: '',
   memberIds: [],
 };
+
+interface DiaryEntry {
+  key: string;
+  title: string;
+  content: string;
+  createdAt: number;
+  source: 'character' | 'group';
+  groupName?: string;
+}
+
+/** 角色日记：该角色的记忆 + 所在群组的群聊事件，合成时间线 */
+function CharacterDiary({
+  character,
+  groups,
+  onBack,
+  t,
+}: {
+  character: GalCharacter;
+  groups: GalGroup[];
+  onBack: () => void;
+  t: (key: string, params?: Record<string, unknown>) => string;
+}) {
+  const [entries, setEntries] = useState<DiaryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    sidepanelRuntimeClient.request(
+      { type: 'GET_MEMORIES' },
+      { unavailableMessage: 'memory unavailable', acceptFailure: true, decode: (value) => value },
+    )
+      .then((all) => {
+        if (cancelled) return;
+        const list = Array.isArray(all) ? all as Memory[] : [];
+        const myGroupIds = groups
+          .filter((group) => group.memberIds.includes(character.id))
+          .map((group) => group.id);
+        const collected: DiaryEntry[] = [];
+        for (const memory of list) {
+          if (!memory) continue;
+          const name = String(memory.name || '');
+          if (memory.characterId === character.id) {
+            collected.push({
+              key: `c-${memory.id ?? name}`,
+              title: name,
+              content: String(memory.content || ''),
+              createdAt: Number(memory.createdAt || 0),
+              source: 'character',
+            });
+            continue;
+          }
+          if (!name.startsWith('gal-group:')) continue;
+          const groupId = name.slice('gal-group:'.length).split(/\s+/)[0];
+          if (!myGroupIds.includes(groupId)) continue;
+          const groupName = groups.find((group) => group.id === groupId)?.name || groupId;
+          const lines = String(memory.content || '').split('\n');
+          lines.forEach((line, index) => {
+            const text = line.trim();
+            if (!text) return;
+            collected.push({
+              key: `g-${memory.id ?? name}-${index}`,
+              title: groupName,
+              content: text,
+              createdAt: Number(memory.updatedAt || memory.createdAt || 0),
+              source: 'group',
+              groupName,
+            });
+          });
+        }
+        setEntries(collected.sort((a, b) => b.createdAt - a.createdAt));
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [character.id, groups]);
+
+  const primary = 'var(--ds-text)';
+  const secondary = 'var(--ds-text-secondary, #98a1c2)';
+  const border = 'var(--ds-border, rgba(255,255,255,.1))';
+
+  let lastDay = '';
+  return (
+    <div className="flex flex-col h-full">
+      <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+        <div>
+          <h2 className="text-[14px] font-semibold" style={{ color: primary }}>
+            📖 {t('sidepanel.characterPage.diaryTitle')} · {character.name}
+          </h2>
+          <p className="text-[11px]" style={{ color: secondary }}>
+            {t('sidepanel.characterPage.diaryHint')}
+          </p>
+        </div>
+        <button type="button" className="ds-btn text-[11px]" onClick={onBack}>←</button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
+        {loading ? (
+          <SkeletonList rows={3} />
+        ) : entries.length === 0 ? (
+          <p className="text-[11px]" style={{ color: secondary }}>
+            {t('sidepanel.characterPage.diaryEmpty')}
+          </p>
+        ) : entries.map((entry) => {
+          const day = formatDay(entry.createdAt);
+          const showDay = day !== lastDay;
+          lastDay = day;
+          return (
+            <div key={entry.key}>
+              {showDay && (
+                <div className="text-[10px] mt-2 mb-1" style={{ color: secondary }}>{day}</div>
+              )}
+              <div className="rounded-lg border p-2.5" style={{ borderColor: border }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-[12px] font-medium truncate" style={{ color: primary }}>
+                    {entry.title}
+                  </span>
+                  {entry.source === 'group' && (
+                    <span className="text-[9px] px-1 rounded" style={{ color: '#8f7bff', border: '1px solid rgba(143,123,255,.5)' }}>
+                      {t('sidepanel.characterPage.diaryGroupPrefix')}
+                    </span>
+                  )}
+                  <span className="text-[10px] ml-auto shrink-0" style={{ color: secondary }}>
+                    {formatTime(entry.createdAt)}
+                  </span>
+                </div>
+                <div className="text-[11px] whitespace-pre-wrap mt-1" style={{ color: secondary }}>
+                  {entry.content.slice(0, 400)}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function formatDay(timestamp: number): string {
+  const date = new Date(timestamp || 0);
+  if (Number.isNaN(date.getTime())) return '—';
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function formatTime(timestamp: number): string {
+  const date = new Date(timestamp || 0);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
 
 function GroupsList({
   groups,
