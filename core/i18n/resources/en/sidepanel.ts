@@ -276,7 +276,7 @@ export const sidepanel = {
     },
     group: {
       title: 'GAL Groups',
-      description: 'Group members share one project (memories and instructions) so they hear each other, like a group chat. On the DeepSeek GAL stage open 「👥 群组」 in the top bar, enter the group and tick this round’s speakers.',
+      description: 'Group members share one project (memories and instructions) so they hear each other, like a group chat. On the DeepSeek GAL stage open the group button in the top bar, enter the group and tick this round’s speakers.',
       create: 'New group',
       empty: 'No groups yet',
       emptyHelp: 'Create a group and pick members; a shared project is created automatically for it (group memories and setup).',
@@ -295,7 +295,7 @@ export const sidepanel = {
       edit: 'Edit',
       delete: 'Delete',
       deleteConfirm: 'Delete this group? Its shared project and memories are kept (clean them up on the Projects page if needed).',
-      chatHint: 'Open the GAL stage on chat.deepseek.com → top bar 「👥 群组」 → enter the group and tick this round’s speakers.',
+      chatHint: 'Open the GAL stage on chat.deepseek.com → the group button in the top bar → enter the group and tick this round’s speakers.',
     },
   },
   galSettings: {
