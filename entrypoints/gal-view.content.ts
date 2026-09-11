@@ -483,6 +483,25 @@ function sendToDeepSeek(text) {
 }
 
 /** DOM 兜底：读页面最后一条 AI 正式回复（剥离思考块） */
+/** 工具名 → 友好中文标签（舞台状态胶囊用） */
+const TOOL_LABELS = {
+  web_search: '联网搜索', web_fetch: '读取网页',
+  memory_save: '记忆保存', memory_update: '记忆更新', memory_delete: '记忆删除', memory_import_preview: '记忆导入',
+  python_exec: 'Python 执行', python_status: 'Python 状态',
+  shell_exec: 'Shell 执行', shell_status: 'Shell 状态',
+  artifact_create: '生成网页', artifact_bundle_create: '打包产物',
+  skill_draft_create: '起草技能', gal_character_upsert: '更新角色卡',
+  mcp_discover: 'MCP 发现', mcp_describe: 'MCP 说明', mcp_invoke: 'MCP 调用',
+}
+function toolLabel(name) {
+  const raw = String(name || '').trim()
+  if (!raw) return ''
+  if (TOOL_LABELS[raw]) return TOOL_LABELS[raw]
+  const bare = raw.replace(/^mcp_[a-z0-9_]+_/, '')
+  if (TOOL_LABELS[bare]) return TOOL_LABELS[bare]
+  return raw
+}
+
 function readPageLastAssistantText() {
   const selectors = [
     '[class*="message"][class*="assistant"]', '[class*="ds-chat-message-assistant"]',
@@ -493,8 +512,14 @@ function readPageLastAssistantText() {
     if (!els.length) continue
     const last = els[els.length - 1]
     const clone = last.cloneNode(true)
-    const thinkSel = ['[class*="thinking"]', '[class*="reasoning"]', '[class*="reason"]', '[data-role="thinking"]', '[class*="thought"]', 'details[class*="think"]']
-    for (const t of thinkSel) clone.querySelectorAll(t).forEach((n) => n.remove())
+    // 剥离思考块与 deepseek-pp 的工具/产物卡片：台词里只留对白
+    const stripSel = [
+      '[class*="thinking"]', '[class*="reasoning"]', '[class*="reason"]',
+      '[data-role="thinking"]', '[class*="thought"]', 'details[class*="think"]',
+      '.dpp-tool-block', '.dpp-artifact-results', '.dpp-agent-container',
+      '[class*="tool-block"]', '[data-dpp-tool-key]', '[class*="dpp-tc-"]',
+    ]
+    for (const t of stripSel) clone.querySelectorAll(t).forEach((n) => n.remove())
     const md = clone.querySelector('[class*="markdown"]')
     const text = ((md || clone).textContent || '').trim()
     if (text && text.length > 2) return text
@@ -568,6 +593,13 @@ const GAL_CSS = `
 .g-chip.is-on { border-color:rgba(143,123,255,.9); background:rgba(143,123,255,.2); color:#fff; }
 .g-chips { display:flex; flex-wrap:wrap; margin:4px 0 2px; }
 .g-tool-note { position:fixed; left:50%; bottom:104px; transform:translateX(-50%); z-index:95; max-width:420px; padding:8px 16px; border:1px solid rgba(143,123,255,.5); border-radius:6px; background:rgba(13,16,32,.94); font-size:12px; }
+/* 工具执行状态胶囊（不进入对话框，浮在舞台上方） */
+.g-tool-status { position:fixed; left:50%; bottom:152px; transform:translateX(-50%); z-index:94; display:none; align-items:center; gap:8px; max-width:min(560px,86%); padding:6px 14px; border:1px solid rgba(143,123,255,.42); border-radius:16px; background:rgba(13,16,32,.9); color:#c9cede; font-size:12px; box-shadow:0 8px 24px rgba(0,0,0,.42); }
+.g-tool-status.is-on { display:flex; }
+.g-tool-status.is-done { border-color:rgba(52,211,153,.55); color:#c9f0dd; }
+.g-tool-spin { width:10px; height:10px; flex:none; border-radius:50%; border:2px solid rgba(143,123,255,.35); border-top-color:#8f7bff; animation:g-spin .8s linear infinite; }
+.g-tool-status.is-done .g-tool-spin { border-color:rgba(52,211,153,.85); border-top-color:rgba(52,211,153,.85); animation:none; }
+@keyframes g-spin { to { transform:rotate(360deg); } }
 /* RP 自动保存卡片 */
 .g-rp-save { position:absolute; left:50%; bottom:100px; transform:translateX(-50%); z-index:96; width:min(420px,90%); padding:14px 16px; background:rgba(16,20,38,.97); border:1px solid rgba(143,123,255,.5); border-radius:10px; box-shadow:0 18px 50px rgba(0,0,0,.6); }
 .g-rp-save-title { font-size:13px; font-weight:700; }
@@ -638,6 +670,69 @@ class GalStage {
     this.renderStage()
     this.renderInput()
     this.renderViewToggle()
+    this.renderToolStatus()
+  }
+
+  /** 工具执行状态胶囊：浮在输入区上方，不进入对话框 */
+  renderToolStatus() {
+    const el = document.createElement('div')
+    el.className = 'g-tool-status'
+    el.innerHTML = '<span class="g-tool-spin"></span><span class="g-tool-text"></span>'
+    this.el.append(el)
+    this.toolStatusEl = el
+  }
+  showToolStatus(text, done) {
+    if (!this.toolStatusEl) return
+    clearTimeout(this._toolStatusTimer)
+    this.toolStatusEl.querySelector('.g-tool-text').textContent = text
+    this.toolStatusEl.className = 'g-tool-status is-on' + (done ? ' is-done' : '')
+  }
+  hideToolStatus(delayMs) {
+    if (!this.toolStatusEl) return
+    clearTimeout(this._toolStatusTimer)
+    const el = this.toolStatusEl
+    if (delayMs) {
+      this._toolStatusTimer = setTimeout(() => { el.className = 'g-tool-status' }, delayMs)
+      return
+    }
+    el.className = 'g-tool-status'
+  }
+  /** 读页面里 deepseek-pp 工具块的执行概况（工具名 / 数量 / 失败数） */
+  readPageToolActivity() {
+    const blocks = document.querySelectorAll('.dpp-tool-block')
+    if (!blocks.length) return { total: 0, failed: 0, labels: [] }
+    const block = blocks[blocks.length - 1]
+    const items = block.querySelectorAll('.dpp-tool-block-item')
+    const labels = []
+    let failed = 0
+    items.forEach((item) => {
+      const nameEl = item.querySelector('.dpp-tool-block-item-name')
+      const statusEl = item.querySelector('.dpp-tool-block-item-status')
+      const raw = nameEl ? String(nameEl.textContent || '').trim() : ''
+      if (raw) labels.push(toolLabel(raw))
+      if (statusEl && statusEl.classList.contains('error')) failed += 1
+    })
+    return { total: labels.length || items.length, failed, labels }
+  }
+  /** 本轮请求的工具活动刷新（final=true 表示回复已落地，显示完成态） */
+  syncToolActivity(final) {
+    const activity = this.readPageToolActivity()
+    if (activity.total === 0) {
+      if (final) this.hideToolStatus()
+      return
+    }
+    const head = activity.labels.slice(0, 3).join(' · ')
+    const more = activity.labels.length > 3 ? ' 等 ' + activity.labels.length + ' 项' : ''
+    if (final) {
+      const failedNote = activity.failed > 0 ? '（失败 ' + activity.failed + '）' : ''
+      this.showToolStatus(
+        (activity.failed > 0 ? '⚠️ ' : '✓ ') + '工具执行完成：' + (head || activity.total + ' 项') + more + failedNote,
+        true,
+      )
+      this.hideToolStatus(2400)
+      return
+    }
+    this.showToolStatus('🔧 ' + (head || '正在执行工具') + more + ' 执行中…', false)
   }
 
   renderTopbar() {
@@ -930,6 +1025,8 @@ class GalStage {
       this._domTimer = setTimeout(check, 500)
       if (!this.running || this.streaming) return
       if (this._sentAt && Date.now() - this._sentAt < 3000) return
+      // 工具执行中：舞台状态胶囊跟随页面工具块（不进入对话文本）
+      this.syncToolActivity(false)
       const text = readPageLastAssistantText()
       if (text && text !== this._lastDomText) {
         this._lastDomText = text
@@ -940,6 +1037,7 @@ class GalStage {
         this.setLine('assistant', clean)
         this.running = false
         this._sentAt = null
+        this.syncToolActivity(true)
         this.finishTurn(clean)
       }
       if (this._sentAt && Date.now() - this._sentAt > 45000) {
@@ -947,6 +1045,7 @@ class GalStage {
         this.statusText = ''
         this._sentAt = null
         this.updateStageContent()
+        this.hideToolStatus()
         this.finishTurn('')
       }
     }
