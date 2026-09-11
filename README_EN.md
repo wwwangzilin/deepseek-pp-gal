@@ -41,6 +41,18 @@ Every character owns an **independent memory space**:
 - The **「🧠 记忆」** button in the character panel manages that character's memories: view, add, promote to global, delete.
 - Switching characters opens a fresh conversation (session-level isolation) so previous context does not leak.
 
+## 👥 Groups (characters that hear each other)
+
+Bundle characters into a **group**: members share one project as their common context (project memories + group setup), so whatever happens in the group reaches everyone.
+
+- Sidebar → Characters → Groups: create a group and pick members (a shared project is created automatically).
+- GAL stage top bar → group button: enter the group and tick this round's speakers (or "all in order") — members speak in turn with their own persona; tick nobody for a private single-character chat.
+- Portraits stand **side by side** during group chat, with the current speaker highlighted.
+
+## ❤️ More
+
+Affinity (0-100, shapes how intimate the tone is) · **AI-created characters** (`gal_character_upsert`) · **SillyTavern PNG card** import/export · **character diary** timeline · **story saves** · **proactive messages** when idle · polished tool-call status pill on the stage.
+
 ## ⚡ Inherited capabilities
 
 All upstream DeepSeek++ v1.14.0 features (see the [upstream README](https://github.com/zhu1090093659/deepseek-pp)): agentic memory, Side Panel chat, Skills, native-style tools (web search / web fetch / Python & Shell sandbox / browser control), prompt presets, saved items, conversation export, MCP servers, scheduled automation, cloud sync (Google Drive / OneDrive / WebDAV), floating pet and themes.
@@ -81,6 +93,7 @@ Release flow: bump the version (`package.json` and `packages/shell-host/package.
 
 ## 📜 Version history
 
+- **v1.16.0**: character system fully merged into DeepSeek++ (dedicated Characters page/store, memory isolation, AI-created characters, PNG cards, diary), groups (shared project context, turn-taking speakers, multi-portrait stage), affinity, story saves, proactive messages, tool-call UI polish. See [docs/releases/1.16.0.md](docs/releases/1.16.0.md).
 - **v1.15.0**: GAL-tavern stage + DSH-style character mode (character-scoped memory, auto attribution) + original-UI-default with one-click toggle. See [docs/releases/1.15.0.md](docs/releases/1.15.0.md).
 - v1.14.0 and earlier: upstream DeepSeek++ history under [docs/releases/](docs/releases/).
 
