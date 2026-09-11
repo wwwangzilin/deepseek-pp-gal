@@ -140,7 +140,7 @@ function mapCardToCharacter(
   const data = (nested ?? root) as CharacterCardData;
 
   const name = stringOr(data.name, '').trim();
-  if (!name) warnings.push('卡里没有角色名，已命名为「未命名角色」');
+  if (!name) warnings.push('Card has no character name; imported as "Unnamed character"');
   const extensions = (data.extensions && typeof data.extensions === 'object')
     ? data.extensions as Record<string, unknown>
     : {};
@@ -162,7 +162,7 @@ function mapCardToCharacter(
 
   const character: NewGalCharacter = {
     id: makeImportedId(),
-    name: name || '未命名角色',
+    name: name || 'Unnamed character',
     color: stringOr(gal.color, '#8f7bff'),
     avatar: stringOr(gal.avatar, ''),
     description,
@@ -176,7 +176,7 @@ function mapCardToCharacter(
       ? Math.max(0, Math.min(100, Math.round(gal.affinity)))
       : 0,
   };
-  if (source === 'ccv3') warnings.push('读取自 V3（ccv3）卡');
+  if (source === 'ccv3') warnings.push('Read from a V3 (ccv3) card');
   return { character, warnings };
 }
 

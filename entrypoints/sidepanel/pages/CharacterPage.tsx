@@ -214,7 +214,7 @@ export default function CharacterPage() {
     }
   };
 
-  /** 导入 SillyTavern 兼容的 PNG 角色卡（可多选） */
+  /** Imports SillyTavern-compatible PNG character cards (multi-select). */
   const handleImportCards = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const generation = fence.current.begin();
@@ -242,7 +242,7 @@ export default function CharacterPage() {
     }
   };
 
-  /** 导出为 PNG 角色卡（SillyTavern 可直接读） */
+  /** Exports the character as a PNG card (SillyTavern can read it). */
   const handleExportCard = (character: GalCharacter) => {
     try {
       const png = buildCharacterCardPng(character);
@@ -498,7 +498,7 @@ interface DiaryEntry {
   groupName?: string;
 }
 
-/** 角色日记：该角色的记忆 + 所在群组的群聊事件，合成时间线 */
+/** Character diary: this character's memories plus group chat events, merged into a timeline. */
 function CharacterDiary({
   character,
   groups,
