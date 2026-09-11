@@ -54,6 +54,7 @@ export function decodeGalCharacter(value: unknown, path = 'galCharacter'): GalCh
     greeting: optionalString(object.greeting, `${path}.greeting`),
     systemPrompt: optionalString(object.systemPrompt, `${path}.systemPrompt`),
     memoryTags: optionalStringArray(object.memoryTags, `${path}.memoryTags`),
+    affinity: optionalAffinity(object.affinity, `${path}.affinity`),
     createdAt,
     updatedAt,
   };
@@ -117,4 +118,13 @@ function finiteNumberOr(value: unknown, path: string, fallback: number): number 
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (value === undefined) return fallback;
   throw new Error(`${path} must be a finite number`);
+}
+
+/** Relationship value, clamped to 0-100. */
+function optionalAffinity(value: unknown, path: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`${path} must be a finite number`);
+  }
+  return Math.max(0, Math.min(100, Math.round(value)));
 }

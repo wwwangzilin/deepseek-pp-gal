@@ -254,6 +254,7 @@ export const sidepanel = {
       greetingLabel: 'Greeting',
       systemLabel: 'Extra system instructions',
       tagsLabel: 'Memory keywords (comma separated)',
+      affinityLabel: 'Affinity (0-100, shapes how intimate the tone is)',
       save: 'Save',
       cancel: 'Cancel',
     },

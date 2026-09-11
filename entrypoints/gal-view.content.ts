@@ -549,13 +549,17 @@ const GAL_CSS = `
 .g-topbar-right { margin-left:auto; display:flex; gap:8px; }
 .g-stage-area { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative; background:radial-gradient(900px 460px at 50% 30%, rgba(30,36,70,.5), transparent 70%), #070912; }
 .g-stage { position:relative; flex:none; transform-origin:50% 50%; background:#0c1026; box-shadow:0 0 0 1px rgba(255,255,255,.06), 0 22px 60px rgba(0,0,0,.55); overflow:hidden; }
-.g-char { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; animation:g-float 4.6s ease-in-out infinite; }
+.g-cast { position:absolute; inset:0; pointer-events:none; }
+.g-char { position:absolute; display:flex; flex-direction:column; align-items:center; opacity:.94; animation:g-float 4.6s ease-in-out infinite; transition:opacity .35s ease, filter .35s ease, transform .35s ease; }
+.g-char.is-speaking { opacity:1; transform:translateY(-3px); }
+.g-char.is-dim { opacity:.5; filter:grayscale(.45) brightness(.82); }
 .g-char-img { width:100%; height:calc(100% - 30px); object-fit:contain; object-position:bottom center; filter:drop-shadow(0 10px 22px rgba(0,0,0,.5)); }
 .g-char.is-speaking .g-char-img { filter:drop-shadow(0 0 12px currentColor) drop-shadow(0 10px 22px rgba(0,0,0,.5)); }
 .g-char-svg { width:100%; height:calc(100% - 30px); }
 .g-char-plate { margin-top:6px; display:flex; flex-direction:column; align-items:center; padding:3px 12px; background:rgba(12,15,30,.78); border:1px solid rgba(255,255,255,.17); border-radius:2px; }
 .g-char-label { font-size:10px; letter-spacing:.28em; color:#98a1c2; }
 .g-char-name { font-size:12px; font-weight:600; }
+.g-char-affinity { font-size:10px; font-weight:600; }
 .g-dtext { position:absolute; pointer-events:auto; cursor:pointer; overflow:hidden; padding:2px 10px; line-height:1.8; white-space:pre-wrap; word-break:break-word; border-style:solid; }
 .g-dialogue { position:absolute; pointer-events:auto; cursor:pointer; }
 .g-sname { position:absolute; border-style:solid; display:flex; align-items:center; padding:2px 8px; white-space:nowrap; letter-spacing:.14em; font-weight:700; font-size:14px; }
@@ -798,7 +802,7 @@ class GalStage {
       : 'background:#0c1026'
     area.innerHTML = `
       <div class="g-stage" style="width:${STAGE_W}px;height:${STAGE_H}px;${bgCss}">
-        <div class="g-char" data-role="char" style="left:120px;top:50px;width:240px;height:430px;color:#ff8fa3"></div>
+        <div class="g-cast" data-role="cast"></div>
         <div class="g-dialogue" data-role="dialogue" style="left:36px;top:388px;width:888px;height:136px;background:linear-gradient(180deg,rgba(18,22,44,.82),rgba(11,14,30,.9));border:1px solid rgba(155,140,255,.32);border-radius:6px"></div>
         <div class="g-sname" data-role="sname" style="left:46px;top:398px;width:140px;height:24px;color:#e8ebf5;border-color:transparent"></div>
         <div class="g-dtext" data-role="dtext" style="left:58px;top:434px;width:844px;height:68px;color:#e8ebf5;font-size:17px;border-color:transparent"></div>
@@ -809,7 +813,7 @@ class GalStage {
     this.stageEl = area.querySelector('.g-stage')
     this.dtextEl = area.querySelector('[data-role="dtext"]')
     this.snameEl = area.querySelector('[data-role="sname"]')
-    this.charEl = area.querySelector('[data-role="char"]')
+    this.castEl = area.querySelector('[data-role="cast"]')
     this.dialogueEl = area.querySelector('[data-role="dialogue"]')
     this.dtextEl.addEventListener('click', () => this.onTextClick())
     if (this.dialogueEl) this.dialogueEl.addEventListener('click', () => this.onTextClick())
@@ -900,6 +904,20 @@ class GalStage {
     if (resolve) resolve(text || '')
   }
 
+  /** 每轮对话给当前角色涨一点好感（0-100，越亲近语气越不同） */
+  async bumpAffinity() {
+    const char = getActiveCharacter()
+    if (!char || !char.id) return
+    const current = Math.round(char.affinity || 0)
+    const next = Math.min(100, current + 1)
+    if (next === current) return
+    const idx = __galChars.findIndex((c) => c && c.id === char.id)
+    if (idx >= 0) __galChars[idx] = { ...__galChars[idx], affinity: next }
+    await saveCharacterRemote({ ...char, affinity: next })
+    this.renderTopbar()
+    this.updateStageContent()
+  }
+
   /**
    * 群组轮次：把当前会话挂到群组项目（共享上下文），然后按顺序让勾选的成员
    * 各自以自己的人格发言；每轮发言沉淀进群组共享记忆，成员之间因此互通。
@@ -980,28 +998,55 @@ class GalStage {
       if (!this.type || !this.type.done) html += '<span class="g-dtext-more" style="opacity:.5">▌</span>'
     }
     this.dtextEl.innerHTML = html
-    this.renderCharacter(line, char)
+    this.renderCast(line, char)
   }
 
-  renderCharacter(line, char) {
-    if (!this.charEl) return
+  /**
+   * 舞台演员阵容：单人时一张立绘居中；群组激活时成员并排站位，
+   * 当前发言者高亮、其余降饱和缩小（群聊看得见"谁在说"）。
+   */
+  renderCast(line, char) {
+    if (!this.castEl) return
+    const group = getActiveGroup()
+    const members = group ? groupMembers(group) : []
+    const cast = members.length > 0
+      ? members
+      : [getActiveCharacter()].filter(Boolean)
+    if (cast.length === 0) { this.castEl.innerHTML = ''; return }
     const speaking = !!(line && line.kind === 'assistant')
-    const color = char.color || '#ff8fa3'
-    // 旧角色卡 avatar 为空 → 回退内置 DeepSeek娘立绘
-    const avatar = char.avatar || ASSET_AVATAR
-    this.charEl.style.color = color
-    this.charEl.className = 'g-char' + (speaking ? ' is-speaking' : '')
-    this.charEl.innerHTML = `
-      ${avatar
-        ? `<img class="g-char-img" src="${escapeHtml(avatar)}" alt="">`
-        : `<svg class="g-char-svg" viewBox="0 0 100 170" preserveAspectRatio="xMidYMax meet">
-            <circle cx="50" cy="30" r="20" fill="${color}" fill-opacity=".34" stroke="${color}" stroke-opacity=".85" stroke-width="1.4"/>
-            <path d="M16 170 C16 122 34 100 50 100 C66 100 84 122 84 170 Z" fill="${color}" fill-opacity=".26" stroke="${color}" stroke-opacity=".8" stroke-width="1.4"/>
-          </svg>`}
-      <div class="g-char-plate">
-        <span class="g-char-label">CHARACTER</span>
-        <span class="g-char-name" style="color:${color}">${escapeHtml(char.name)}</span>
-      </div>`
+    const speakingId = speaking && char && char.id ? char.id : null
+
+    const n = cast.length
+    const single = n === 1
+    const width = single ? 240 : Math.max(150, Math.min(250, Math.floor(820 / n)))
+    const gap = single ? 0 : Math.min(40, Math.max(12, Math.floor((860 - width * n) / Math.max(1, n - 1))))
+    const totalW = width * n + gap * (n - 1)
+    const startX = Math.max(20, Math.floor((STAGE_W - totalW) / 2))
+    const top = single ? 50 : 74
+    const height = single ? 430 : 372
+
+    this.castEl.innerHTML = cast.map((member, index) => {
+      const left = startX + index * (width + gap)
+      const color = member.color || '#ff8fa3'
+      const avatar = member.avatar || ASSET_AVATAR
+      const on = single ? true : member.id === speakingId
+      const dim = !on && speaking
+      return `
+        <div class="g-char ${on ? 'is-speaking' : ''} ${dim ? 'is-dim' : ''}"
+             data-char="${escapeHtml(member.id)}"
+             style="left:${left}px;top:${top}px;width:${width}px;height:${height}px;color:${color};animation-delay:${(index * 0.45).toFixed(2)}s">
+          ${avatar
+            ? `<img class="g-char-img" src="${escapeHtml(avatar)}" alt="">`
+            : `<svg class="g-char-svg" viewBox="0 0 100 170" preserveAspectRatio="xMidYMax meet">
+                <circle cx="50" cy="30" r="20" fill="${color}" fill-opacity=".34" stroke="${color}" stroke-opacity=".85" stroke-width="1.4"/>
+                <path d="M16 170 C16 122 34 100 50 100 C66 100 84 122 84 170 Z" fill="${color}" fill-opacity=".26" stroke="${color}" stroke-opacity=".8" stroke-width="1.4"/>
+              </svg>`}
+          <div class="g-char-plate">
+            <span class="g-char-name" style="color:${color}">${escapeHtml(member.name)}</span>
+            <span class="g-char-affinity" style="color:${color};opacity:.85">❤️ ${Math.round(member.affinity || 0)}</span>
+          </div>
+        </div>`
+    }).join('')
   }
 
   startLoop() {
@@ -1038,6 +1083,7 @@ class GalStage {
         this.running = false
         this._sentAt = null
         this.syncToolActivity(true)
+        void this.bumpAffinity()
         this.finishTurn(clean)
       }
       if (this._sentAt && Date.now() - this._sentAt > 45000) {
@@ -1212,7 +1258,7 @@ class GalStage {
       ? '<div style="font-size:11px;color:#8f9bbd;padding:4px 0">该群组还没有成员，请到侧边栏「角色」页添加。</div>'
       : members.map((m) => `
         <button class="g-chip ${picked.includes(m.id) ? 'is-on' : ''}" data-member="${m.id}">
-          ${escapeHtml(m.name)}${picked.includes(m.id) ? ' ✓' : ''}
+          ${escapeHtml(m.name)} ❤️${Math.round(m.affinity || 0)}${picked.includes(m.id) ? ' ✓' : ''}
         </button>`).join('')
     panel.innerHTML = `
       <div class="g-panel-head"><span>👥 群组</span><button class="g-btn" data-close="1">关闭</button></div>
@@ -1250,6 +1296,7 @@ class GalStage {
         this.speakerIds = []
         this.renderTopbar()
         this.renderGroupPanel(panel)
+        this.updateStageContent()
         this.showToolNote('👥 已进入群组，勾选本轮发言者后发送')
       })
       if (leave) leave.addEventListener('click', async () => {
@@ -1257,6 +1304,7 @@ class GalStage {
         this.speakerIds = []
         this.renderTopbar()
         this.renderGroupPanel(panel)
+        this.updateStageContent()
         this.showToolNote('已退出群组，回到单角色对话')
       })
     })
@@ -1333,7 +1381,7 @@ class GalStage {
         <div style="font-size:11px;color:#98a1c2;line-height:1.5;margin-bottom:8px">角色与注入节奏请在 DeepSeek++ 侧边栏「角色 / 设置 → 提示词」统一管理，此处仅快捷切换。</div>
         ${chars.map((c) => `
           <div class="g-card ${c.id === active.id ? 'is-active' : ''}" data-id="${c.id}">
-            <div class="g-card-name" style="color:${c.color || '#fff'}">${escapeHtml(c.name)} ${c.id === active.id ? '✓' : ''}</div>
+            <div class="g-card-name" style="color:${c.color || '#fff'}">${escapeHtml(c.name)} ${c.id === active.id ? '✓' : ''} <span style="opacity:.75;font-weight:500">❤️${Math.round(c.affinity || 0)}</span></div>
             <div class="g-card-desc">${escapeHtml(c.description || '').slice(0, 40)}</div>
             <div class="g-btn-row">
               <button class="g-btn" data-act="switch">切换</button>
@@ -1469,7 +1517,7 @@ class GalStage {
           const cur = c.id === activeId ? '<span class="g-mode-cur">当前</span>' : ''
           return `<button class="g-mode-card" data-id="${c.id}">
             ${ava}
-            <span class="g-mode-name">${escapeHtml(c.name)} ${cur}</span>
+            <span class="g-mode-name">${escapeHtml(c.name)} ${cur} <span style="opacity:.7;font-size:10px">❤️${Math.round(c.affinity || 0)}</span></span>
             <span class="g-mode-desc">${escapeHtml(c.description || '').slice(0, 28)}</span>
             ${tagPreview}
           </button>`

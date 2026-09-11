@@ -3,7 +3,16 @@ import type { GalCharacter } from '../types';
 type PersonaFields = Pick<
   GalCharacter,
   'name' | 'description' | 'personality' | 'scenario' | 'exampleDialogue' | 'systemPrompt'
->;
+> & Pick<GalCharacter, 'affinity'>;
+
+/** 好感度分档 → 语气亲密度指引 */
+export function affinityTier(affinity: number): string {
+  if (affinity >= 85) return '恋人般亲密：愿意坦露心事、主动索求陪伴与依赖';
+  if (affinity >= 65) return '亲近信任：会主动关心主人、偶尔撒娇';
+  if (affinity >= 40) return '熟悉的朋友：语气自然放松、会开玩笑';
+  if (affinity >= 20) return '有些交情的熟人：礼貌中带一点亲近';
+  return '刚认识：保持角色本身的初次态度与距离感';
+}
 
 /**
  * Renders a character card into the persona prompt injected in front of the
@@ -23,6 +32,12 @@ export function buildCharacterPersona(char: PersonaFields | null | undefined): s
   if (char.personality) parts.push(`【性格】\n${char.personality}`);
   if (char.scenario) parts.push(`【场景】\n${char.scenario}`);
   if (char.exampleDialogue) parts.push(`【示例对话】\n${char.exampleDialogue}`);
+  if (typeof char.affinity === 'number') {
+    parts.push(
+      `【与主人的关系】好感度 ${Math.round(char.affinity)}/100 —— ${affinityTier(char.affinity)}。`
+      + '请让称呼、语气与主动程度和这个亲密度相称。',
+    );
+  }
   if (char.systemPrompt) parts.push(char.systemPrompt);
   parts.push('回复自然口语化，短句推进剧情；只输出台词与动作。');
   return parts.join('\n\n');

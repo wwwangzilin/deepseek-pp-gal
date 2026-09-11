@@ -31,6 +31,7 @@ const BLANK_FIELDS: Omit<GalCharacter, 'id' | 'createdAt' | 'updatedAt'> = {
   greeting: '',
   systemPrompt: '',
   memoryTags: [],
+  affinity: 0,
 };
 
 export default function CharacterPage() {
@@ -337,6 +338,9 @@ export default function CharacterPage() {
                         <div className="flex items-center gap-2">
                           <span className="text-[13px] font-semibold truncate" style={{ color: 'var(--ds-text)' }}>
                             {character.name}
+                          </span>
+                          <span className="text-[10px] shrink-0" style={{ color: 'var(--ds-text-secondary, #98a1c2)' }}>
+                            ❤️ {Math.round(character.affinity ?? 0)}
                           </span>
                           {isActive && (
                             <span className="text-[10px] px-1.5 rounded" style={{ color: '#34d399' }}>
@@ -650,6 +654,7 @@ function CharacterForm({
         greeting: existing.greeting ?? '',
         systemPrompt: existing.systemPrompt ?? '',
         memoryTags: existing.memoryTags ?? [],
+        affinity: existing.affinity ?? 0,
       }
       : {}),
   }));
@@ -733,6 +738,26 @@ function CharacterForm({
           value={tagsText}
           onChange={(event) => setTagsText(event.target.value)}
         />
+      </label>
+
+      <label className="block text-[11px]" style={{ color: 'var(--ds-text-secondary, #98a1c2)' }}>
+        {t('sidepanel.characterPage.form.affinityLabel')}
+        <div className="flex items-center gap-2 mt-1">
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={Math.round(draft.affinity ?? 0)}
+            onChange={(event) => setDraft((current) => ({
+              ...current,
+              affinity: Math.max(0, Math.min(100, Number(event.target.value) || 0)),
+            }))}
+            className="flex-1"
+          />
+          <span className="text-[12px] w-12 text-right" style={{ color: 'var(--ds-text)' }}>
+            ❤️ {Math.round(draft.affinity ?? 0)}
+          </span>
+        </div>
       </label>
 
       <div className="flex gap-2 pt-1">

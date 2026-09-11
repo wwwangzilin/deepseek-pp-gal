@@ -554,6 +554,8 @@ export interface GalCharacter {
   greeting?: string;
   systemPrompt?: string;
   memoryTags?: string[];
+  /** Relationship value with the user, 0-100 (grows through conversation). */
+  affinity?: number;
   createdAt: number;
   updatedAt: number;
 }

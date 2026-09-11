@@ -254,6 +254,7 @@ export const sidepanel = {
       greetingLabel: '开场白',
       systemLabel: '附加系统指令',
       tagsLabel: '记忆关键词（逗号分隔）',
+      affinityLabel: '好感度（0-100，影响语气亲密度）',
       save: '保存',
       cancel: '取消',
     },
