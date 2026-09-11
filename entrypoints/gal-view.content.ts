@@ -28,6 +28,8 @@ const STORAGE_ENABLED = 'dsgpp_gal_enabled'
 let __galChars = []
 let __galActiveId = null
 let __galSettings = { enabled: false, characterCadence: 'every_message' }
+let __galGroups = []
+let __galActiveGroupId = null
 
 function runtimeSend(type, payload) {
   return new Promise((resolve) => {
@@ -40,10 +42,12 @@ function runtimeSend(type, payload) {
   })
 }
 async function refreshGalData() {
-  const [chars, active, settings] = await Promise.all([
+  const [chars, active, settings, groups, activeGroup] = await Promise.all([
     runtimeSend('GET_CHARACTERS'),
     runtimeSend('GET_ACTIVE_CHARACTER'),
     runtimeSend('GET_GAL_SETTINGS'),
+    runtimeSend('GET_GROUPS'),
+    runtimeSend('GET_ACTIVE_GROUP'),
   ])
   if (Array.isArray(chars)) __galChars = chars
   if (active && typeof active === 'object' && active.id) __galActiveId = active.id
@@ -55,6 +59,66 @@ async function refreshGalData() {
         ? settings.characterCadence : 'every_message',
     }
   }
+  if (Array.isArray(groups)) __galGroups = groups
+  __galActiveGroupId = activeGroup && activeGroup.id ? activeGroup.id : null
+}
+
+// ── 群组（借用项目做共享上下文载体）──────────────────────────────
+function getGroups() { return __galGroups.slice() }
+function getActiveGroup() {
+  return __galGroups.find((g) => g && g.id === __galActiveGroupId) || null
+}
+function groupMembers(group) {
+  if (!group || !Array.isArray(group.memberIds)) return []
+  return group.memberIds.map((id) => getCharacterById(id)).filter(Boolean)
+}
+async function setActiveGroupRemote(id) {
+  __galActiveGroupId = id || null
+  await runtimeSend('SET_ACTIVE_GROUP', { id: id || null })
+}
+/** 把当前 DeepSeek 会话挂到群组项目上：成员共享项目记忆与项目上下文 */
+async function bindConversationToGroupProject(group) {
+  if (!group || !group.projectId) return
+  const conv = await runtimeSend('GET_CURRENT_DEEPSEEK_CONVERSATION')
+  if (!conv || typeof conv !== 'object' || !conv.conversationId) return
+  await runtimeSend('SET_PENDING_PROJECT_CONTEXT', { projectId: group.projectId })
+  await runtimeSend('ADD_CONVERSATION_TO_PROJECT', {
+    conversationId: String(conv.conversationId),
+    title: String(conv.title || ''),
+    url: String(conv.url || ''),
+  })
+}
+const GROUP_EVENT_MAX_LINES = 20
+/** 把一轮群聊发言追加进群组共享记忆（scope: project → 项目成员都能看到） */
+async function appendGroupEvent(group, speakerName, replyText) {
+  if (!group || !group.projectId || !replyText) return
+  const text = stripMarkdown(replyText).replace(/\s+/g, ' ').trim().slice(0, 140)
+  if (!text) return
+  const name = 'gal-group:' + group.id
+  const memories = await runtimeSend('GET_MEMORIES')
+  const list = Array.isArray(memories) ? memories : []
+  const existing = list.find((m) => m && String(m.name || '').startsWith(name))
+  const prevLines = existing && typeof existing.content === 'string'
+    ? existing.content.split('\n').map((line) => line.trim()).filter(Boolean)
+    : []
+  const content = [...prevLines, '【' + speakerName + '】' + text]
+    .slice(-GROUP_EVENT_MAX_LINES)
+    .join('\n')
+  const tags = [group.name || '群组', '群聊事件']
+  if (existing && existing.id != null) {
+    await runtimeSend('UPDATE_MEMORY', { ...existing, name, content, tags })
+    return
+  }
+  await runtimeSend('SAVE_MEMORY', {
+    type: 'topic',
+    scope: 'project',
+    projectId: group.projectId,
+    name,
+    content,
+    description: '',
+    tags,
+    pinned: false,
+  })
 }
 function getCharacters() { return __galChars.slice() }
 function getCharacterById(id) { return __galChars.find((c) => c && c.id === id) || null }
@@ -499,6 +563,10 @@ const GAL_CSS = `
 .g-switch input:checked + .g-switch-slider::before { transform:translateX(16px); }
 .g-card-desc { font-size:11px; color:#98a1c2; margin-top:2px; }
 .g-btn-row { display:flex; gap:6px; margin-top:8px; }
+.g-chip { display:inline-flex; align-items:center; gap:4px; margin:0 6px 6px 0; padding:4px 10px; border:1px solid rgba(255,255,255,.18); border-radius:14px; background:rgba(255,255,255,.04); color:#c9cede; font-size:11px; cursor:pointer; }
+.g-chip:hover { border-color:rgba(143,123,255,.6); }
+.g-chip.is-on { border-color:rgba(143,123,255,.9); background:rgba(143,123,255,.2); color:#fff; }
+.g-chips { display:flex; flex-wrap:wrap; margin:4px 0 2px; }
 .g-tool-note { position:fixed; left:50%; bottom:104px; transform:translateX(-50%); z-index:95; max-width:420px; padding:8px 16px; border:1px solid rgba(143,123,255,.5); border-radius:6px; background:rgba(13,16,32,.94); font-size:12px; }
 /* RP 自动保存卡片 */
 .g-rp-save { position:absolute; left:50%; bottom:100px; transform:translateX(-50%); z-index:96; width:min(420px,90%); padding:14px 16px; background:rgba(16,20,38,.97); border:1px solid rgba(143,123,255,.5); border-radius:10px; box-shadow:0 18px 50px rgba(0,0,0,.6); }
@@ -546,6 +614,9 @@ class GalStage {
     this._domTimer = null
     this._sentAt = null
     this._lastDomText = ''
+    this.speakerIds = []
+    this.queueRunning = false
+    this._turnResolve = null
 
     this.render()
     this.onCharacterChanged()
@@ -582,6 +653,7 @@ class GalStage {
       </select>
       <div class="g-topbar-right">
         <button class="g-btn" data-act="chars">角色</button>
+        <button class="g-btn" data-act="groups">👥 ${escapeHtml(getActiveGroup() ? getActiveGroup().name : '群组')}</button>
         <button class="g-btn g-btn-accent" data-act="pick">🎭 选模式</button>
         <button class="g-btn" data-act="original">原版界面</button>
         <button class="g-btn" data-act="disable" title="关闭 GAL 舞台并记住选择（下次刷新不自动打开）">⏻ 关闭 GAL</button>
@@ -594,6 +666,7 @@ class GalStage {
       const btn = e.target.closest('[data-act]')
       if (!btn) return
       if (btn.dataset.act === 'chars') this.togglePanel('chars')
+      else if (btn.dataset.act === 'groups') this.togglePanel('groups')
       else if (btn.dataset.act === 'pick') this.showModePicker()
       else if (btn.dataset.act === 'original') this.toggleView()
       else if (btn.dataset.act === 'disable') disableGalFromStage()
@@ -665,23 +738,55 @@ class GalStage {
     this.el.append(input)
     this.inputBox = input.querySelector('.g-input-box')
     this.sendBtn = input.querySelector('.g-send')
-    const doSend = () => {
-      const text = this.inputBox.value.trim()
-      if (!text || this.running) return
-      // RP 意图自动识别：检测到角色扮演设定请求 → 弹出保存为模式卡
-      if (detectRoleplayIntent(text)) {
-        this.offerSaveRoleplayMode(text)
+    const doSend = () => { void this.handleSend() }
+    this.inputBox.addEventListener('input', () => { this.sendBtn.disabled = this.inputBox.value.trim() === '' })
+    this.inputBox.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); doSend() }
+    })
+    this.sendBtn.addEventListener('click', doSend)
+  }
+
+  /** 群组模式下本轮的发言者（面板勾选顺序；未勾选=仅当前激活角色单聊） */
+  pendingSpeakers(group) {
+    if (!group) return []
+    const picked = Array.isArray(this.speakerIds) ? this.speakerIds : []
+    if (picked.length === 0) return []
+    return groupMembers(group).filter((member) => picked.includes(member.id))
+  }
+
+  async handleSend() {
+    if (this.running || this.queueRunning) return
+    const text = this.inputBox ? this.inputBox.value.trim() : ''
+    if (!text) return
+    // RP 意图自动识别：检测到角色扮演设定请求 → 弹出保存为模式卡
+    if (detectRoleplayIntent(text)) {
+      this.offerSaveRoleplayMode(text)
+    }
+    const group = getActiveGroup()
+    const speakers = this.pendingSpeakers(group)
+    if (!group || speakers.length === 0) {
+      await this.sendTurn(text, true)
+      return
+    }
+    await this.runGroupRound(text, group, speakers)
+  }
+
+  /** 单轮：发送文本并等待回复落地，返回最终回复文本（群聊队列据此串行） */
+  sendTurn(text, showPlayer) {
+    return new Promise((resolve) => {
+      this._turnResolve = resolve
+      if (showPlayer) {
+        this.lines.push({ kind: 'player', text })
+        this.currentLine = { kind: 'player', text }
       }
-      this.lines.push({ kind: 'player', text })
-      this.inputBox.value = ''
-      this.sendBtn.disabled = true
+      if (this.inputBox) this.inputBox.value = ''
+      if (this.sendBtn) this.sendBtn.disabled = true
       this.running = true
       this.streaming = false
       this.streamText = ''
       this.statusText = '思考中'
       this._sentAt = Date.now()
       this._lastDomText = ''
-      this.currentLine = { kind: 'player', text }
       this.resetPaging()
       this.updateStageContent()
       if (!sendToDeepSeek(text)) {
@@ -689,13 +794,42 @@ class GalStage {
         this.running = false
         this._sentAt = null
         this.updateStageContent()
+        this.finishTurn('')
       }
-    }
-    this.inputBox.addEventListener('input', () => { this.sendBtn.disabled = this.inputBox.value.trim() === '' })
-    this.inputBox.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); doSend() }
     })
-    this.sendBtn.addEventListener('click', doSend)
+  }
+  /** 单轮结束（DOM 兜底拿到回复或超时）→ 唤醒群聊队列 */
+  finishTurn(text) {
+    const resolve = this._turnResolve
+    this._turnResolve = null
+    if (resolve) resolve(text || '')
+  }
+
+  /**
+   * 群组轮次：把当前会话挂到群组项目（共享上下文），然后按顺序让勾选的成员
+   * 各自以自己的人格发言；每轮发言沉淀进群组共享记忆，成员之间因此互通。
+   */
+  async runGroupRound(text, group, speakers) {
+    this.queueRunning = true
+    try {
+      await bindConversationToGroupProject(group)
+      let first = true
+      for (const member of speakers) {
+        if (member.id !== __galActiveId) {
+          await setActiveCharacterRemote(member.id)
+          this.renderTopbar()
+          await new Promise((r) => setTimeout(r, 500))
+        }
+        this.updateStageContent()
+        const turnText = first ? text : '（轮到「' + member.name + '」接话）'
+        const reply = await this.sendTurn(turnText, first)
+        first = false
+        await appendGroupEvent(group, member.name, reply)
+      }
+    } finally {
+      this.queueRunning = false
+      this.updateStageContent()
+    }
   }
 
   setLine(kind, text) {
@@ -806,12 +940,14 @@ class GalStage {
         this.setLine('assistant', clean)
         this.running = false
         this._sentAt = null
+        this.finishTurn(clean)
       }
       if (this._sentAt && Date.now() - this._sentAt > 45000) {
         this.running = false
         this.statusText = ''
         this._sentAt = null
         this.updateStageContent()
+        this.finishTurn('')
       }
     }
     this._domTimer = setTimeout(check, 1000)
@@ -967,6 +1103,87 @@ class GalStage {
     })
   }
 
+  /** 群组面板：选群组 + 勾选本轮发言者（成员共享同一项目上下文） */
+  renderGroupPanel(panel) {
+    const groups = getGroups()
+    const active = getActiveGroup()
+    const members = groupMembers(active)
+    const picked = Array.isArray(this.speakerIds) ? this.speakerIds : []
+    const memberHtml = members.length === 0
+      ? '<div style="font-size:11px;color:#8f9bbd;padding:4px 0">该群组还没有成员，请到侧边栏「角色」页添加。</div>'
+      : members.map((m) => `
+        <button class="g-chip ${picked.includes(m.id) ? 'is-on' : ''}" data-member="${m.id}">
+          ${escapeHtml(m.name)}${picked.includes(m.id) ? ' ✓' : ''}
+        </button>`).join('')
+    panel.innerHTML = `
+      <div class="g-panel-head"><span>👥 群组</span><button class="g-btn" data-close="1">关闭</button></div>
+      <div class="g-panel-body">
+        <div style="font-size:11px;color:#98a1c2;line-height:1.55;margin-bottom:8px">
+          群组成员共享同一个项目（记忆与设定互通）。勾选本轮发言者，发送后会按顺序依次发言；不勾选则只有当前角色单聊。
+        </div>
+        ${groups.length === 0
+          ? '<div style="font-size:11px;color:#8f9bbd;padding:6px 0">还没有群组。请到 DeepSeek++ 侧边栏「角色」页新建群组并添加成员。</div>'
+          : groups.map((g) => `
+          <div class="g-card ${active && active.id === g.id ? 'is-active' : ''}" data-group="${g.id}">
+            <div class="g-card-name">${escapeHtml(g.name)} ${active && active.id === g.id ? '✓' : ''}</div>
+            <div class="g-card-desc">${escapeHtml((g.description || '').slice(0, 36))} · ${Array.isArray(g.memberIds) ? g.memberIds.length : 0} 名成员</div>
+            <div class="g-btn-row">
+              <button class="g-btn" data-act="enter">进入群组</button>
+              <button class="g-btn" data-act="leave">退出群组</button>
+            </div>
+          </div>`).join('')}
+        ${active ? `
+          <div class="g-label">本轮发言者（${picked.length === 0 ? '未勾选 = 单聊' : picked.length + ' 人依次'}）</div>
+          <div class="g-chips">${memberHtml}</div>
+          <div class="g-btn-row">
+            <button class="g-btn" data-act="all">全选依次发言</button>
+            <button class="g-btn" data-act="none">清空</button>
+          </div>
+          <div style="font-size:10px;color:#8f9bbd;margin-top:8px">共享项目：${active.projectId ? escapeHtml(active.projectId) : '（未绑定）'}</div>` : ''}
+      </div>`
+    panel.querySelector('[data-close]').addEventListener('click', () => this.closePanel())
+    panel.querySelectorAll('[data-group]').forEach((card) => {
+      const groupId = card.dataset.group
+      const enter = card.querySelector('[data-act="enter"]')
+      const leave = card.querySelector('[data-act="leave"]')
+      if (enter) enter.addEventListener('click', async () => {
+        await setActiveGroupRemote(groupId)
+        this.speakerIds = []
+        this.renderTopbar()
+        this.renderGroupPanel(panel)
+        this.showToolNote('👥 已进入群组，勾选本轮发言者后发送')
+      })
+      if (leave) leave.addEventListener('click', async () => {
+        await setActiveGroupRemote(null)
+        this.speakerIds = []
+        this.renderTopbar()
+        this.renderGroupPanel(panel)
+        this.showToolNote('已退出群组，回到单角色对话')
+      })
+    })
+    panel.querySelectorAll('[data-member]').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const id = chip.dataset.member
+        const list = Array.isArray(this.speakerIds) ? this.speakerIds.slice() : []
+        const idx = list.indexOf(id)
+        if (idx >= 0) list.splice(idx, 1)
+        else list.push(id)
+        this.speakerIds = list
+        this.renderGroupPanel(panel)
+      })
+    })
+    const allBtn = panel.querySelector('[data-act="all"]')
+    if (allBtn) allBtn.addEventListener('click', () => {
+      this.speakerIds = groupMembers(getActiveGroup()).map((m) => m.id)
+      this.renderGroupPanel(panel)
+    })
+    const noneBtn = panel.querySelector('[data-act="none"]')
+    if (noneBtn) noneBtn.addEventListener('click', () => {
+      this.speakerIds = []
+      this.renderGroupPanel(panel)
+    })
+  }
+
   onCharacterChanged() {
     const char = getActiveCharacter()
     this.lines = []
@@ -1000,6 +1217,7 @@ class GalStage {
     const panel = document.createElement('div')
     panel.className = 'g-panel'
     if (name === 'chars') this.renderCharsPanel(panel)
+    else if (name === 'groups') this.renderGroupPanel(panel)
     this.el.append(panel)
   }
   closePanel() {

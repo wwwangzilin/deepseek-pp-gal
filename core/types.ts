@@ -574,7 +574,29 @@ export interface GalSettings {
 export interface GalCharacterState {
   activeCharacter: GalCharacter | null;
   settings: GalSettings;
+  activeGroup: GalGroup | null;
 }
+
+/**
+ * GAL group: a cast of characters that share one DeepSeek++ project as their
+ * common context (project memories + project instructions), so members can
+ * "hear" what happened in the group. Chat itself stays in DeepSeek sessions.
+ */
+export interface GalGroup {
+  id: string;
+  name: string;
+  description?: string;
+  instructions?: string;
+  /** Owning deepseek-pp project id (shared memory/context carrier). */
+  projectId?: string;
+  memberIds: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type NewGalGroup = Omit<GalGroup, 'id' | 'createdAt' | 'updatedAt'> & {
+  id?: string;
+};
 
 export interface DeepSeekRequest {
   chat_session_id: string;
@@ -631,6 +653,11 @@ export type MessageAction =
   | { type: 'SET_ACTIVE_CHARACTER'; payload: { id: string | null } }
   | { type: 'GET_GAL_SETTINGS' }
   | { type: 'SAVE_GAL_SETTINGS'; payload: Partial<GalSettings> }
+  | { type: 'GET_GROUPS' }
+  | { type: 'SAVE_GROUP'; payload: NewGalGroup }
+  | { type: 'DELETE_GROUP'; payload: { id: string } }
+  | { type: 'GET_ACTIVE_GROUP' }
+  | { type: 'SET_ACTIVE_GROUP'; payload: { id: string | null } }
   | { type: 'GET_PROMPT_INJECTION_SETTINGS' }
   | { type: 'SAVE_PROMPT_INJECTION_SETTINGS'; payload: Partial<PromptInjectionSettingsType> }
   | { type: 'GET_SKILL_AUTO_ACTIVATION_SETTINGS' }

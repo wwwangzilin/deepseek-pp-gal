@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { GalCharacter, GalCharacterCadence, GalSettings, Memory, NewGalCharacter } from '../../../core/types';
+import type { GalCharacter, GalCharacterCadence, GalGroup, GalSettings, Memory, NewGalCharacter, NewGalGroup } from '../../../core/types';
 import { decodeGalCharacter, decodeGalCharacterCollection } from '../../../core/character/codec';
+import { decodeGalGroup, decodeGalGroupCollection } from '../../../core/group/codec';
 import PageIntro from '../components/PageIntro';
 import { SkeletonList } from '../components/settings/primitives';
 import { useI18n } from '../i18n';
@@ -16,6 +17,7 @@ import { sidepanelRuntimeClient } from '../runtime-client';
  */
 
 type View = 'list' | 'edit';
+type PageTab = 'characters' | 'groups';
 interface CharacterDraft extends Omit<GalCharacter, 'id' | 'createdAt' | 'updatedAt'> {}
 
 const BLANK_FIELDS: Omit<GalCharacter, 'id' | 'createdAt' | 'updatedAt'> = {
@@ -35,10 +37,14 @@ export default function CharacterPage() {
   const { t } = useI18n();
   const tk = t as unknown as (key: string, params?: Record<string, unknown>) => string;
   const [characters, setCharacters] = useState<GalCharacter[]>([]);
+  const [groups, setGroups] = useState<GalGroup[]>([]);
+  const [pageTab, setPageTab] = useState<PageTab>('characters');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>('list');
   const [editing, setEditing] = useState<GalCharacter | null>(null);
+  const [groupView, setGroupView] = useState<View>('list');
+  const [editingGroup, setEditingGroup] = useState<GalGroup | null>(null);
   const [memoryCharacter, setMemoryCharacter] = useState<GalCharacter | null>(null);
   const [statusMessage, setStatusMessage] = useState('');
   const fence = useRef(createRequestGenerationFence());
@@ -52,7 +58,7 @@ export default function CharacterPage() {
   const load = useCallback(async () => {
     const generation = fence.current.begin();
     try {
-      const [list, active] = await Promise.all([
+      const [list, active, groupList] = await Promise.all([
         sidepanelRuntimeClient.request(
           { type: 'GET_CHARACTERS' },
           {
@@ -70,10 +76,19 @@ export default function CharacterPage() {
             ),
           },
         ),
+        sidepanelRuntimeClient.request(
+          { type: 'GET_GROUPS' },
+          {
+            acceptFailure: true,
+            unavailableMessage: t('sidepanel.characterPage.backendUnavailable'),
+            decode: (value) => decodeGalGroupCollection(value, 'groupResponse'),
+          },
+        ),
       ]);
       if (!fence.current.isCurrent(generation)) return;
       setCharacters(list);
       setActiveId(active?.id ?? null);
+      setGroups(groupList);
       setLoading(false);
       setStatusMessage('');
     } catch (error) {
@@ -156,6 +171,45 @@ export default function CharacterPage() {
   const openMemory = (character: GalCharacter) => setMemoryCharacter(character);
   const closeMemory = () => setMemoryCharacter(null);
 
+  const handleSaveGroup = async (draft: NewGalGroup, existingId: string | null) => {
+    const generation = fence.current.begin();
+    try {
+      const payload: NewGalGroup = existingId
+        ? { ...draft, id: existingId }
+        : { ...draft, id: makeGroupId() };
+      await sidepanelRuntimeClient.request(
+        { type: 'SAVE_GROUP', payload },
+        {
+          unavailableMessage: t('sidepanel.characterPage.backendUnavailable'),
+          decode: (value) => decodeGalGroup(value, 'saveGroupResponse'),
+        },
+      );
+      if (!fence.current.isCurrent(generation)) return;
+      setGroupView('list');
+      setEditingGroup(null);
+      await load();
+    } catch (error) {
+      if (!fence.current.isCurrent(generation)) return;
+      fail(error);
+    }
+  };
+
+  const handleDeleteGroup = async (group: GalGroup) => {
+    if (!confirm(t('sidepanel.characterPage.group.deleteConfirm'))) return;
+    try {
+      await sidepanelRuntimeClient.request(
+        { type: 'DELETE_GROUP', payload: { id: group.id } },
+        {
+          unavailableMessage: t('sidepanel.characterPage.backendUnavailable'),
+          decode: (value) => value,
+        },
+      );
+      await load();
+    } catch (error) {
+      fail(error);
+    }
+  };
+
   if (memoryCharacter) {
     return (
       <CharacterMemories
@@ -171,20 +225,76 @@ export default function CharacterPage() {
       <div className="px-4 pt-4 pb-2">
         <PageIntro
           title={t('sidepanel.characterPage.title')}
-          description={t('sidepanel.characterPage.description')}
+          description={pageTab === 'groups'
+            ? t('sidepanel.characterPage.group.description')
+            : t('sidepanel.characterPage.description')}
           meta={activeId ? t('sidepanel.characterPage.activeMeta') : undefined}
         />
-        <button
-          type="button"
-          onClick={beginNew}
-          className="mt-2 rounded px-3 py-1.5 text-[12px] font-medium"
-          style={{ color: '#fff', background: 'linear-gradient(135deg,#8f7bff,#4f8cff)' }}
-        >
-          ＋ {t('sidepanel.characterPage.create')}
-        </button>
+        <div className="flex gap-2 mt-2">
+          {(['characters', 'groups'] as const).map((tabKey) => (
+            <button
+              key={tabKey}
+              type="button"
+              onClick={() => {
+                setPageTab(tabKey);
+                setView('list');
+                setGroupView('list');
+              }}
+              className="rounded px-3 py-1.5 text-[12px] font-medium"
+              style={{
+                color: pageTab === tabKey ? '#fff' : 'var(--ds-text)',
+                background: pageTab === tabKey
+                  ? 'linear-gradient(135deg,#8f7bff,#4f8cff)'
+                  : 'transparent',
+                border: '1px solid var(--ds-border, rgba(255,255,255,.15))',
+              }}
+            >
+              {tabKey === 'characters'
+                ? t('sidepanel.characterPage.tabs.characters')
+                : t('sidepanel.characterPage.tabs.groups')}
+            </button>
+          ))}
+        </div>
+        {pageTab === 'characters' ? (
+          <button
+            type="button"
+            onClick={beginNew}
+            className="mt-2 rounded px-3 py-1.5 text-[12px] font-medium"
+            style={{ color: '#fff', background: 'linear-gradient(135deg,#8f7bff,#4f8cff)' }}
+          >
+            ＋ {t('sidepanel.characterPage.create')}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => { setEditingGroup(null); setGroupView('edit'); }}
+            className="mt-2 rounded px-3 py-1.5 text-[12px] font-medium"
+            style={{ color: '#fff', background: 'linear-gradient(135deg,#8f7bff,#4f8cff)' }}
+          >
+            ＋ {t('sidepanel.characterPage.group.create')}
+          </button>
+        )}
       </div>
 
-      {view === 'edit' ? (
+      {pageTab === 'groups' ? (
+        groupView === 'edit' ? (
+          <GroupForm
+            existing={editingGroup}
+            characters={characters}
+            onSave={handleSaveGroup}
+            onCancel={() => { setGroupView('list'); setEditingGroup(null); }}
+            t={tk}
+          />
+        ) : (
+          <GroupsList
+            groups={groups}
+            characters={characters}
+            onEdit={(group) => { setEditingGroup(group); setGroupView('edit'); }}
+            onDelete={handleDeleteGroup}
+            t={tk}
+          />
+        )
+      ) : view === 'edit' ? (
         <CharacterForm
           existing={editing}
           onSave={handleSaveDraft}
@@ -278,6 +388,206 @@ export default function CharacterPage() {
 
 function makeCharacterId(): string {
   return 'char-' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36);
+}
+
+function makeGroupId(): string {
+  return 'gal-group-' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36);
+}
+
+const GROUP_EMPTY: Omit<GalGroup, 'id' | 'createdAt' | 'updatedAt' | 'projectId'> = {
+  name: '',
+  description: '',
+  instructions: '',
+  memberIds: [],
+};
+
+function GroupsList({
+  groups,
+  characters,
+  onEdit,
+  onDelete,
+  t,
+}: {
+  groups: GalGroup[];
+  characters: GalCharacter[];
+  onEdit: (group: GalGroup) => void;
+  onDelete: (group: GalGroup) => Promise<void>;
+  t: (key: string, params?: Record<string, unknown>) => string;
+}) {
+  const primary = 'var(--ds-text)';
+  const secondary = 'var(--ds-text-secondary, #98a1c2)';
+  const border = 'var(--ds-border, rgba(255,255,255,.1))';
+  const nameOf = (id: string) => characters.find((c) => c.id === id)?.name ?? id;
+
+  return (
+    <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
+      <p className="text-[11px]" style={{ color: secondary }}>{t('sidepanel.characterPage.group.chatHint')}</p>
+      {groups.length === 0 ? (
+        <p className="text-[12px]" style={{ color: secondary }}>
+          {t('sidepanel.characterPage.group.empty')}
+          <br />
+          {t('sidepanel.characterPage.group.emptyHelp')}
+        </p>
+      ) : groups.map((group) => (
+        <div key={group.id} className="rounded-lg border p-3" style={{ borderColor: border }}>
+          <div className="text-[13px] font-semibold" style={{ color: primary }}>{group.name}</div>
+          {group.description && (
+            <div className="text-[11px]" style={{ color: secondary }}>{group.description}</div>
+          )}
+          <div className="text-[10px] mt-1" style={{ color: secondary }}>
+            {t('sidepanel.characterPage.group.memberCount', { count: group.memberIds.length })}
+            {' · '}
+            {group.memberIds.map(nameOf).join(' / ') || '—'}
+          </div>
+          <div className="flex gap-2 mt-2">
+            <button type="button" className="ds-btn text-[11px]" onClick={() => onEdit(group)}>
+              {t('sidepanel.characterPage.group.edit')}
+            </button>
+            <button type="button" className="ds-btn text-[11px]" onClick={() => void onDelete(group)}>
+              {t('sidepanel.characterPage.group.delete')}
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GroupForm({
+  existing,
+  characters,
+  onSave,
+  onCancel,
+  t,
+}: {
+  existing: GalGroup | null;
+  characters: GalCharacter[];
+  onSave: (draft: NewGalGroup, existingId: string | null) => Promise<void>;
+  onCancel: () => void;
+  t: (key: string, params?: Record<string, unknown>) => string;
+}) {
+  const [draft, setDraft] = useState(() => ({
+    name: existing?.name ?? GROUP_EMPTY.name,
+    description: existing?.description ?? '',
+    instructions: existing?.instructions ?? '',
+    memberIds: existing?.memberIds ? [...existing.memberIds] : [],
+  }));
+  const [saving, setSaving] = useState(false);
+
+  const toggleMember = (id: string) => {
+    setDraft((current) => ({
+      ...current,
+      memberIds: current.memberIds.includes(id)
+        ? current.memberIds.filter((item) => item !== id)
+        : [...current.memberIds, id],
+    }));
+  };
+
+  const submit = async () => {
+    if (!draft.name.trim()) return;
+    setSaving(true);
+    try {
+      await onSave({
+        name: draft.name.trim(),
+        description: draft.description.trim(),
+        instructions: draft.instructions.trim(),
+        memberIds: draft.memberIds,
+      }, existing?.id ?? null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputStyle = {
+    color: 'var(--ds-text)',
+    borderColor: 'var(--ds-border, rgba(255,255,255,.15))',
+    background: 'var(--ds-input-bg, rgba(255,255,255,.04))',
+  } as const;
+
+  return (
+    <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-3">
+      <h2 className="text-[14px] font-semibold" style={{ color: 'var(--ds-text)' }}>
+        {existing
+          ? t('sidepanel.characterPage.group.form.editTitle')
+          : t('sidepanel.characterPage.group.form.newTitle')}
+      </h2>
+
+      <label className="block text-[11px]" style={{ color: 'var(--ds-text-secondary, #98a1c2)' }}>
+        {t('sidepanel.characterPage.group.form.nameLabel')}
+        <input
+          className="mt-1 w-full rounded border bg-transparent px-2 py-1.5 text-[13px]"
+          style={inputStyle}
+          value={draft.name}
+          onChange={(event) => setDraft((c) => ({ ...c, name: event.target.value }))}
+        />
+      </label>
+
+      <label className="block text-[11px]" style={{ color: 'var(--ds-text-secondary, #98a1c2)' }}>
+        {t('sidepanel.characterPage.group.form.descriptionLabel')}
+        <input
+          className="mt-1 w-full rounded border bg-transparent px-2 py-1.5 text-[13px]"
+          style={inputStyle}
+          value={draft.description}
+          onChange={(event) => setDraft((c) => ({ ...c, description: event.target.value }))}
+        />
+      </label>
+
+      <label className="block text-[11px]" style={{ color: 'var(--ds-text-secondary, #98a1c2)' }}>
+        {t('sidepanel.characterPage.group.form.instructionsLabel')}
+        <textarea
+          className="mt-1 w-full rounded border bg-transparent px-2 py-1.5 text-[12px] min-h-[56px]"
+          style={inputStyle}
+          value={draft.instructions}
+          onChange={(event) => setDraft((c) => ({ ...c, instructions: event.target.value }))}
+        />
+      </label>
+
+      <div className="text-[11px]" style={{ color: 'var(--ds-text-secondary, #98a1c2)' }}>
+        {t('sidepanel.characterPage.group.form.membersLabel')}
+        {characters.length === 0 ? (
+          <div className="text-[11px] mt-1" style={{ color: 'var(--ds-text-secondary, #98a1c2)' }}>
+            {t('sidepanel.characterPage.group.form.noMembers')}
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-1.5 mt-1.5">
+            {characters.map((character) => {
+              const on = draft.memberIds.includes(character.id);
+              return (
+                <button
+                  key={character.id}
+                  type="button"
+                  onClick={() => toggleMember(character.id)}
+                  className="rounded-full px-2.5 py-1 text-[11px]"
+                  style={{
+                    color: on ? '#fff' : 'var(--ds-text)',
+                    border: `1px solid ${on ? character.color || '#8f7bff' : 'var(--ds-border, rgba(255,255,255,.18))'}`,
+                    background: on ? `${character.color || '#8f7bff'}33` : 'transparent',
+                  }}
+                >
+                  {character.name}{on ? ' ✓' : ''}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <button
+          type="button"
+          className="rounded px-3 py-1.5 text-[12px] font-medium"
+          style={{ color: '#fff', background: 'linear-gradient(135deg,#8f7bff,#4f8cff)' }}
+          disabled={saving || !draft.name.trim()}
+          onClick={() => void submit()}
+        >
+          {t('sidepanel.characterPage.group.form.save')}
+        </button>
+        <button type="button" className="ds-btn text-[12px]" onClick={onCancel}>
+          {t('sidepanel.characterPage.group.form.cancel')}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function Avatar({ character, size }: { character: GalCharacter; size: number }) {

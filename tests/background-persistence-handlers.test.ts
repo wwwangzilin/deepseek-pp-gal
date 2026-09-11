@@ -15,6 +15,7 @@ import type {
   BackgroundConfig,
   GalCharacter,
   GalCharacterCadence,
+  GalGroup,
   GalSettings,
   GitHubSkillImportResult,
   GitHubSkillPreview,
@@ -110,6 +111,17 @@ const character: GalCharacter = {
   updatedAt: 1,
 };
 
+const group: GalGroup = {
+  id: 'gal-group-1',
+  name: '测试群组',
+  description: '',
+  instructions: '',
+  projectId: 'project-1',
+  memberIds: ['gal-char-1'],
+  createdAt: 1,
+  updatedAt: 1,
+};
+
 const savedItem: SavedItem = {
   id: 'saved-1',
   syncId: 'saved-sync-1',
@@ -166,10 +178,10 @@ describe('R4.1 persistence runtime handler ownership', () => {
       localPreference: createLocalPreferenceDependencies(),
     });
     const types = handlers.map((handler) => handler.type);
-    const expected = readInventoryCommands('R4.1 / #360 — Persistence, library, and local preferences (70)');
+    const expected = readInventoryCommands('R4.1 / #360 — Persistence, library, and local preferences (75)');
 
-    expect(types).toHaveLength(70);
-    expect(new Set(types).size).toBe(70);
+    expect(types).toHaveLength(75);
+    expect(new Set(types).size).toBe(75);
     expect([...types].sort()).toEqual([...expected].sort());
     for (const type of types) expect(getRuntimeCommandOwner(type)).toBe('typed-handler');
     const decodedTypes = Object.entries(RUNTIME_COMMAND_CONTRACTS)
@@ -588,6 +600,11 @@ function createLibraryDependencies(): LibraryRuntimeHandlerDependencies {
       characterCadence: (settings.characterCadence ?? 'every_message') as GalCharacterCadence,
     })),
     broadcastCharacterState: vi.fn(async () => undefined),
+    getAllGroups: vi.fn(async () => [group]),
+    saveGroup: vi.fn(async () => group),
+    deleteGroup: vi.fn(async () => undefined),
+    getActiveGroup: vi.fn(async () => group),
+    setActiveGroupId: vi.fn(async () => undefined),
   };
 }
 

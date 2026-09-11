@@ -49,6 +49,13 @@ import {
   saveGalSettings,
   setActiveCharacterId,
 } from '../core/character/store';
+import {
+  deleteGroup,
+  getAllGroups,
+  getActiveGroup,
+  setActiveGroupId,
+} from '../core/group/store';
+import { saveGroupWithSharedProject } from './background/group-project';
 import { getDeepSeekTheme, saveDeepSeekTheme } from '../core/theme/store';
 import { getBackgroundConfig, saveBackgroundConfig, clearBackgroundConfig } from '../core/background/store';
 import { getPetConfig, savePetConfig, clearPetConfig } from '../core/pet/store';
@@ -489,6 +496,11 @@ const runtimeCommandRegistry = createRuntimeCommandRegistry({
         setActiveCharacterId,
         getGalSettings,
         saveGalSettings,
+        getAllGroups,
+        saveGroup: saveGroupWithSharedProject,
+        deleteGroup,
+        getActiveGroup,
+        setActiveGroupId,
         broadcastCharacterState,
       },
       project: {
@@ -1211,12 +1223,13 @@ async function broadcastVoiceSettingsUpdate(excludeTabId?: number) {
 }
 
 async function broadcastCharacterState(excludeTabId?: number) {
-  const [activeCharacter, settings] = await Promise.all([
+  const [activeCharacter, settings, activeGroup] = await Promise.all([
     getActiveCharacter(),
     getGalSettings(),
+    getActiveGroup(),
   ]);
   await broadcastToTabs(
-    { type: 'CHARACTER_STATE_UPDATED', activeCharacter, settings },
+    { type: 'CHARACTER_STATE_UPDATED', activeCharacter, settings, activeGroup },
     excludeTabId,
   );
 }

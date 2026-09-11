@@ -4,6 +4,7 @@ import type {
   CurrentDeepSeekConversation,
   DeepSeekTheme,
   GalCharacter,
+  GalGroup,
   GalSettings,
   GitHubSkillImportResult,
   GitHubSkillPreview,
@@ -183,6 +184,26 @@ export interface PersistenceRuntimeCommandContracts {
   SAVE_GAL_SETTINGS: {
     request: DeclaredRuntimeRequest<'SAVE_GAL_SETTINGS'>;
     response: GalSettings;
+  };
+  GET_GROUPS: {
+    request: DeclaredRuntimeRequest<'GET_GROUPS'>;
+    response: GalGroup[];
+  };
+  SAVE_GROUP: {
+    request: DeclaredRuntimeRequest<'SAVE_GROUP'>;
+    response: GalGroup;
+  };
+  DELETE_GROUP: {
+    request: DeclaredRuntimeRequest<'DELETE_GROUP'>;
+    response: Ack;
+  };
+  GET_ACTIVE_GROUP: {
+    request: DeclaredRuntimeRequest<'GET_ACTIVE_GROUP'>;
+    response: GalGroup | null;
+  };
+  SET_ACTIVE_GROUP: {
+    request: DeclaredRuntimeRequest<'SET_ACTIVE_GROUP'>;
+    response: Ack;
   };
   GET_PROMPT_INJECTION_SETTINGS: {
     request: DeclaredRuntimeRequest<'GET_PROMPT_INJECTION_SETTINGS'>;

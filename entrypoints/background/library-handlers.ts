@@ -4,8 +4,10 @@ import {
 } from '../../core/messaging/runtime-command-registry';
 import type {
   GalCharacter,
+  GalGroup,
   GalSettings,
   NewGalCharacter,
+  NewGalGroup,
   SavedItem,
   SavedItemInput,
   SystemPromptPreset,
@@ -46,6 +48,11 @@ export interface LibraryRuntimeHandlerDependencies {
   setActiveCharacterId(id: string | null): Promise<void>;
   getGalSettings(): Promise<GalSettings>;
   saveGalSettings(settings: Partial<GalSettings>): Promise<GalSettings>;
+  getAllGroups(): Promise<GalGroup[]>;
+  saveGroup(group: NewGalGroup): Promise<GalGroup>;
+  deleteGroup(id: string): Promise<void>;
+  getActiveGroup(): Promise<GalGroup | null>;
+  setActiveGroupId(id: string | null): Promise<void>;
   broadcastCharacterState(excludeTabId?: number): Promise<void>;
 }
 
@@ -147,6 +154,27 @@ export function createLibraryRuntimeHandlers(
       const saved = await dependencies.saveGalSettings(settings);
       await dependencies.broadcastCharacterState(context.tabId);
       return saved;
+    }),
+    definePayloadlessRuntimeCommandHandler('GET_GROUPS', () => (
+      dependencies.getAllGroups()
+    )),
+    definePersistencePayloadRuntimeCommandHandler('SAVE_GROUP', async (group, context) => {
+      const saved = await dependencies.saveGroup(group);
+      await dependencies.broadcastCharacterState(context.tabId);
+      return saved;
+    }),
+    definePersistencePayloadRuntimeCommandHandler('DELETE_GROUP', async (payload, context) => {
+      await dependencies.deleteGroup(payload.id);
+      await dependencies.broadcastCharacterState(context.tabId);
+      return { ok: true as const };
+    }),
+    definePayloadlessRuntimeCommandHandler('GET_ACTIVE_GROUP', () => (
+      dependencies.getActiveGroup()
+    )),
+    definePersistencePayloadRuntimeCommandHandler('SET_ACTIVE_GROUP', async (payload, context) => {
+      await dependencies.setActiveGroupId(payload.id);
+      await dependencies.broadcastCharacterState(context.tabId);
+      return { ok: true as const };
     }),
   ]);
 }

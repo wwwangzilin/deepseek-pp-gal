@@ -5,6 +5,7 @@ import {
 } from '../memory/codec';
 import { decodePreset } from '../preset/codec';
 import { decodeGalSettings, normalizeCharacterInput } from '../character/codec';
+import { normalizeGalGroupInput } from '../group/codec';
 import { decodeSkill } from '../skill/codec';
 import type { PersistenceRuntimeCommandContracts } from './persistence-runtime-contracts';
 import { isPlainRuntimeRecord } from './runtime-boundary';
@@ -201,6 +202,17 @@ export const PERSISTENCE_RUNTIME_PAYLOAD_DECODERS: PersistenceRuntimePayloadDeco
     const payload = recordValue(value, 'SAVE_GAL_SETTINGS.payload');
     decodeGalSettings(payload, 'SAVE_GAL_SETTINGS.payload');
     return typedPayload<'SAVE_GAL_SETTINGS'>(payload);
+  },
+  SAVE_GROUP(value) {
+    return normalizeGalGroupInput(recordValue(value, 'SAVE_GROUP.payload'), 'SAVE_GROUP.payload');
+  },
+  DELETE_GROUP(value) {
+    return decodeNamedRecord<'DELETE_GROUP'>(value, 'DELETE_GROUP.payload', 'id');
+  },
+  SET_ACTIVE_GROUP(value) {
+    const payload = recordValue(value, 'SET_ACTIVE_GROUP.payload');
+    nullableNonEmptyString(payload.id, 'SET_ACTIVE_GROUP.payload.id');
+    return typedPayload<'SET_ACTIVE_GROUP'>(payload);
   },
   SAVE_PROMPT_INJECTION_SETTINGS(value) {
     const payload = recordValue(value, 'SAVE_PROMPT_INJECTION_SETTINGS.payload');
