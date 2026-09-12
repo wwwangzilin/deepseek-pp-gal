@@ -96,8 +96,11 @@ if (requestedBrowsers.some((browser) => !browser)) {
 // runtimes. Same-build measurements under node@22.23.1: firstChatScreen gzip
 // 125600 (cap raised below from 125500), all other chunks inside budget.
 // The initial shell is sidepanel.html's entry script plus every static modulepreload.
+// Refreshed for the GAL fork (1.16.0): the character/group pages, settings panel and
+// their i18n copy add to the shell; measured locally at 393735 raw / 120294 gzip,
+// baselines below carry a small headroom on top of that measurement.
 const BASELINE = Object.freeze({
-  initialShell: { raw: 378_292, gzip: 115_558 },
+  initialShell: { raw: 396_000, gzip: 121_000 },
   routeChunks: {
     ChatPage: { raw: 134_938, gzip: 40_056 },
     CapabilitiesPage: { raw: 160_137, gzip: 35_259 },
@@ -161,7 +164,7 @@ const BUDGET = Object.freeze({
     raw: BASELINE.initialShell.raw,
     gzip: BASELINE.initialShell.gzip + GZIP_ENCODER_VARIANCE_BYTES,
   },
-  firstChatScreen: { raw: 408_548, gzip: 125_600 },
+  firstChatScreen: { raw: 426_000, gzip: 131_000 },
   richRendererIncrement: { raw: 120_000, gzip: 36_000 },
   routeChunks: {
     ChatPage: { raw: 25_000, gzip: 8_000 },
@@ -178,7 +181,7 @@ const BUDGET = Object.freeze({
     SettingsPage: { raw: 45_000, gzip: 14_000 },
     GeneralSubPage: { raw: 5_000, gzip: 2_500 },
     ApiSubPage: { raw: 8_000, gzip: 3_500 },
-    PromptSubPage: { raw: 14_000, gzip: 5_000 },
+    PromptSubPage: { raw: 15_500, gzip: 5_000 },
     VoiceSubPage: { raw: 5_000, gzip: 2_500 },
     AppearanceSubPage: { raw: 8_000, gzip: 3_500 },
     UsageSubPage: { raw: 12_000, gzip: 5_000 },

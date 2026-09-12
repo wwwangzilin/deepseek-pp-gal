@@ -103,7 +103,9 @@ for (const target of targets) {
   }
 
   const webResources = manifest.web_accessible_resources ?? [];
-  assertEqual(webResources.length, 2, `${target.browser}: web-accessible resource group count`);
+  // Three groups since the GAL fork: DeepSeek host assets (pet + wasm), GAL stage
+  // assets (gal/*.png), and the globally accessible sidepanel/floating-chat entries.
+  assertEqual(webResources.length, 3, `${target.browser}: web-accessible resource group count`);
   const deepSeekResources = webResources.find((entry) =>
     Array.isArray(entry.resources) && entry.resources.includes('deepseek/*.wasm'));
   const globalResources = webResources.find((entry) =>

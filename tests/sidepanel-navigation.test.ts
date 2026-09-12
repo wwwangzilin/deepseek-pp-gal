@@ -73,7 +73,7 @@ describe('sidepanel navigation', () => {
     await renderApp();
 
     const topLabels = navButtonLabels('侧栏导航');
-    expect(topLabels).toEqual(['对话', '资料', '项目', '能力', '设置']);
+    expect(topLabels).toEqual(['对话', '资料', '项目', '能力', '角色', '设置']);
 
     unmountRoot();
     await renderElement(React.createElement(LibraryPage));
