@@ -20,6 +20,7 @@ execFileSync('git', ['rev-parse', '--is-inside-work-tree'], { cwd: root, stdio: 
 
 const status = execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim();
 if (status && process.env.CI === 'true') {
+  console.error(`Dirty working tree:\n${status}`);
   throw new Error('Source package requires a clean git tree in CI');
 }
 if (status) {
