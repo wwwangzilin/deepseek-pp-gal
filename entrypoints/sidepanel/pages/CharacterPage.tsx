@@ -3,6 +3,7 @@ import type { GalCharacter, GalCharacterCadence, GalGroup, GalSettings, Memory, 
 import { decodeGalCharacter, decodeGalCharacterCollection } from '../../../core/character/codec';
 import { buildCharacterCardPng, parseCharacterCardFromPng } from '../../../core/character/card';
 import { decodeGalGroup, decodeGalGroupCollection } from '../../../core/group/codec';
+import { groupRelationsSummary } from '../../gal/helpers';
 import PageIntro from '../components/PageIntro';
 import { SkeletonList } from '../components/settings/primitives';
 import { useI18n } from '../i18n';
@@ -815,6 +816,18 @@ function GroupsList({
             {' · '}
             {group.memberIds.map(nameOf).join(' / ') || '—'}
           </div>
+          {(() => {
+            const members = group.memberIds
+              .map((id) => characters.find((character) => character.id === id))
+              .filter((character): character is GalCharacter => Boolean(character));
+            const summary = members.length >= 2 ? groupRelationsSummary(members) : '';
+            if (!summary) return null;
+            return (
+              <div className="text-[10px] mt-1 whitespace-pre-wrap" style={{ color: secondary }}>
+                {summary}
+              </div>
+            );
+          })()}
           <div className="flex gap-2 mt-2">
             <button type="button" className="ds-btn text-[11px]" onClick={() => onEdit(group)}>
               {t('sidepanel.characterPage.group.edit')}

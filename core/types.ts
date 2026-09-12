@@ -560,6 +560,8 @@ export interface GalCharacter {
   affinityDate?: string;
   /** Affinity gained on that local date. */
   affinityToday?: number;
+  /** Character-to-character relationship values (characterId → 0-100). */
+  relations?: Record<string, number>;
   createdAt: number;
   updatedAt: number;
 }

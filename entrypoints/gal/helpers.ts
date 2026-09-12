@@ -158,3 +158,25 @@ export function localDateKey(date: Date = new Date()): string {
   const day = String(date.getDate()).padStart(2, '0');
   return `${date.getFullYear()}-${month}-${day}`;
 }
+
+/**
+ * Renders the character-to-character relationship map into the group project's
+ * context, so every member can "feel" who is close to whom during group chat.
+ */
+export function groupRelationsSummary(
+  members: ReadonlyArray<{ id: string; name: string; relations?: Record<string, number> }>,
+): string {
+  const lines: string[] = [];
+  for (const member of members) {
+    const relations = member.relations ?? {};
+    const pairs = members
+      .filter((other) => other.id !== member.id)
+      .map((other) => ({ name: other.name, value: Math.round(relations[other.id] ?? 0) }))
+      .filter((pair) => pair.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 3);
+    if (pairs.length === 0) continue;
+    lines.push(`${member.name} → ` + pairs.map((pair) => `${pair.name} ${pair.value}`).join('、'));
+  }
+  return lines.join('\n');
+}

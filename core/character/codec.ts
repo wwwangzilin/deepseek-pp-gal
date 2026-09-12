@@ -61,6 +61,7 @@ export function decodeGalCharacter(value: unknown, path = 'galCharacter'): GalCh
     affinity: optionalAffinity(object.affinity, `${path}.affinity`),
     affinityDate: optionalString(object.affinityDate, `${path}.affinityDate`),
     affinityToday: optionalAffinity(object.affinityToday, `${path}.affinityToday`),
+    relations: optionalRelations(object.relations, `${path}.relations`),
     createdAt,
     updatedAt,
   };
@@ -152,4 +153,20 @@ function optionalAffinity(value: unknown, path: string): number | undefined {
     throw new Error(`${path} must be a finite number`);
   }
   return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+/** Character-to-character relation map: plain record of 0-100 values. */
+function optionalRelations(value: unknown, path: string): Record<string, number> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${path} must be an object`);
+  }
+  const out: Record<string, number> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+      throw new Error(`${path}.${key} must be a finite number`);
+    }
+    out[key] = Math.max(0, Math.min(100, Math.round(raw)));
+  }
+  return out;
 }

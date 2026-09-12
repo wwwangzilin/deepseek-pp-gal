@@ -19,6 +19,7 @@ import {
   voiceProfileFor,
   currentDayPeriod,
   localDateKey,
+  groupRelationsSummary,
 } from './gal/helpers'
 /**
  * GAL 酒馆叠加层（ISOLATED world）— 移植自 ds-gal-tavern content.js
@@ -716,6 +717,7 @@ class GalStage {
     this.queueRunning = false
     this._turnResolve = null
     this._lastActivityAt = Date.now()
+    this._relationsSummary = ''
 
     this.render()
     this.onCharacterChanged()
@@ -1085,7 +1087,9 @@ class GalStage {
         const reply = await this.sendTurn(turnText, first)
         first = false
         await appendGroupEvent(group, member.name, reply)
+        await this.bumpRelations(group, member)
       }
+      await this.syncGroupRelationsToProject(group)
     } finally {
       this.queueRunning = false
       this.updateStageContent()
@@ -1246,6 +1250,41 @@ class GalStage {
       this._sentAt = null
       this.showToolNote('⚠️ 重新生成点击失败')
     }
+  }
+
+  /** 群聊发言后：发言者对其他成员的关系 +1（角色间关系网） */
+  async bumpRelations(group, speaker) {
+    if (!group || !speaker || !speaker.id) return
+    const others = groupMembers(group).filter((m) => m.id !== speaker.id)
+    if (others.length === 0) return
+    const relations = { ...(speaker.relations || {}) }
+    for (const other of others) {
+      relations[other.id] = Math.max(0, Math.min(100, Math.round(relations[other.id] || 0) + 1))
+    }
+    const patch = { ...speaker, relations }
+    const idx = __galChars.findIndex((c) => c && c.id === speaker.id)
+    if (idx >= 0) __galChars[idx] = patch
+    await saveCharacterRemote(patch)
+  }
+
+  /**
+   * 把成员关系摘要写进群组项目的上下文（项目 instructions 会随请求注入），
+   * 让角色在群聊中"知道"彼此的关系；内容未变化时不重复写入。
+   */
+  async syncGroupRelationsToProject(group) {
+    if (!group || !group.projectId) return
+    const members = groupMembers(group)
+    if (members.length < 2) return
+    const summary = groupRelationsSummary(members)
+    if (!summary || summary === this._relationsSummary) return
+    this._relationsSummary = summary
+    const instructions = [group.instructions || '', '【成员关系】\n' + summary]
+      .filter(Boolean)
+      .join('\n\n')
+    await runtimeSend('UPDATE_PROJECT_CONTEXT', {
+      projectId: group.projectId,
+      patch: { instructions },
+    })
   }
 
   /** 空闲时角色主动搭话（由 startProactiveLoop 触发） */
