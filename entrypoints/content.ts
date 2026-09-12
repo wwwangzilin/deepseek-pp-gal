@@ -272,6 +272,25 @@ import {
 const TOOL_BLOCK_ID = "dpp-tool-block";
 const TOOL_BLOCK_STYLE_ID = "dpp-tool-block-css";
 const RESTORED_TOOL_UI_SELECTOR = ".dpp-tool-block, .dpp-artifact-results";
+
+/**
+ * GAL stage bridge: the page interceptor already owns the authoritative
+ * assistant text; publish it on the page window so the GAL overlay can render
+ * the reply directly instead of scraping DeepSeek's DOM (which breaks whenever
+ * the host renames its classes). Same isolated world, so a plain postMessage
+ * reaches the overlay; unknown types are ignored by every other listener.
+ */
+function postGalAssistantText(text: string): void {
+  if (typeof text !== "string" || text.trim() === "") return;
+  try {
+    window.postMessage(
+      { source: "deepseek-pp-gal-bridge", type: "GAL_ASSISTANT_TEXT", text },
+      "*",
+    );
+  } catch {
+    /* best-effort bridge; the DOM fallback still covers the reply */
+  }
+}
 const RESTORED_INLINE_AGENT_UI_SELECTOR =
   '.dpp-agent-container[data-restored="true"]';
 const ASSISTANT_RESPONSE_CONTENT_SELECTOR =
@@ -1360,6 +1379,7 @@ async function dispatchMainWorldMessage(
           toolBlockEl = null;
         }
         void startInlineAgentIfNeeded(complete, completedExecutions);
+        postGalAssistantText(complete.text);
         schedulePetIdle();
         break;
       }

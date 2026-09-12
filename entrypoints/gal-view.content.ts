@@ -1,5 +1,21 @@
 // @ts-nocheck — gal 叠加层保持 JS 风格：经 wxt/esbuild 转译（不查类型），
 // 自加入仓库起即存在大量隐式 any，类型债与功能无关，故豁免类型检查。
+// 纯逻辑（工具标签、存档读写、好感度计算、群组事件命名）已抽到 entrypoints/gal/helpers.ts（带类型检查）。
+import {
+  TOOL_LABELS,
+  toolLabel,
+  GAL_SAVES_KEY,
+  GAL_SAVES_LIMIT,
+  galStorageGet,
+  galStorageSet,
+  loadGalSaves,
+  persistGalSaves,
+  AFFINITY_DAILY_CAP,
+  computeAffinityGain,
+  GROUP_EVENT_NAME_PREFIX,
+  groupEventMemoryName,
+  groupIdFromEventMemoryName,
+} from './gal/helpers'
 /**
  * GAL 酒馆叠加层（ISOLATED world）— 移植自 ds-gal-tavern content.js
  *
@@ -67,32 +83,7 @@ async function refreshGalData() {
   __galActiveGroupId = activeGroup && activeGroup.id ? activeGroup.id : null
 }
 
-// ── 剧情存档（gal 专属，直接存扩展 storage，不经 background）────────
-const GAL_SAVES_KEY = 'deepseek_pp_gal_saves'
-const GAL_SAVES_LIMIT = 20
-
-function galStorageGet(key) {
-  return new Promise((resolve) => {
-    try {
-      chrome.storage.local.get(key, (data) => {
-        if (chrome.runtime.lastError) { resolve(undefined); return }
-        resolve(data ? data[key] : undefined)
-      })
-    } catch { resolve(undefined) }
-  })
-}
-function galStorageSet(key, value) {
-  return new Promise((resolve) => {
-    try { chrome.storage.local.set({ [key]: value }, () => resolve(true)) } catch { resolve(false) }
-  })
-}
-async function loadGalSaves() {
-  const raw = await galStorageGet(GAL_SAVES_KEY)
-  return Array.isArray(raw) ? raw : []
-}
-async function persistGalSaves(saves) {
-  await galStorageSet(GAL_SAVES_KEY, saves.slice(0, GAL_SAVES_LIMIT))
-}
+// ── 剧情存档存储键/读写已抽到 entrypoints/gal/helpers.ts ────────
 
 // ── 群组（借用项目做共享上下文载体）──────────────────────────────
 function getGroups() { return __galGroups.slice() }
@@ -119,13 +110,10 @@ async function bindConversationToGroupProject(group) {
     url: String(conv.url || ''),
   })
 }
-/** 好感度每日增长封顶（防止刷满） */
-const AFFINITY_DAILY_CAP = 15
 /** 每条群组事件记忆最多容纳的发言行数（写满后开新分卷，历史不丢） */
 const GROUP_EVENT_MAX_LINES = 20
 /** 群组事件记忆保留的分卷数（超出后删除最旧一卷） */
 const GROUP_EVENT_MAX_CHUNKS = 5
-const GROUP_EVENT_NAME_PREFIX = 'gal-group:'
 
 /**
  * 把一轮群聊发言追加进群组共享记忆（scope: project → 项目成员都能看到）。
@@ -553,25 +541,7 @@ function sendToDeepSeek(text) {
   return true
 }
 
-/** DOM 兜底：读页面最后一条 AI 正式回复（剥离思考块） */
-/** 工具名 → 友好中文标签（舞台状态胶囊用） */
-const TOOL_LABELS = {
-  web_search: '联网搜索', web_fetch: '读取网页',
-  memory_save: '记忆保存', memory_update: '记忆更新', memory_delete: '记忆删除', memory_import_preview: '记忆导入',
-  python_exec: 'Python 执行', python_status: 'Python 状态',
-  shell_exec: 'Shell 执行', shell_status: 'Shell 状态',
-  artifact_create: '生成网页', artifact_bundle_create: '打包产物',
-  skill_draft_create: '起草技能', gal_character_upsert: '更新角色卡',
-  mcp_discover: 'MCP 发现', mcp_describe: 'MCP 说明', mcp_invoke: 'MCP 调用',
-}
-function toolLabel(name) {
-  const raw = String(name || '').trim()
-  if (!raw) return ''
-  if (TOOL_LABELS[raw]) return TOOL_LABELS[raw]
-  const bare = raw.replace(/^mcp_[a-z0-9_]+_/, '')
-  if (TOOL_LABELS[bare]) return TOOL_LABELS[bare]
-  return raw
-}
+/** 工具标签映射已抽到 entrypoints/gal/helpers.ts（toolLabel / TOOL_LABELS） */
 
 function readPageLastAssistantText() {
   const selectors = [
@@ -730,8 +700,44 @@ class GalStage {
     this.onCharacterChanged()
     this.startLoop()
     this.startDomFallback()
+    this.listenForBridgedReplies()
     // deepseek-pp 已完成拦截注入，这里只需广播 READY 让 main 世界确认无冲突
     window.postMessage({ source: NS, type: 'GAL_READY' }, '*')
+  }
+
+  /**
+   * 优先通道：deepseek-pp 拦截层在回复完成时把完整正文通过 window 消息发过来
+   * （同隔离世界可见），舞台据此渲染，不必依赖 DeepSeek 的 DOM 类名。
+   * DOM 兜底（startDomFallback）保留，作为桥不可用时的后备。
+   */
+  listenForBridgedReplies() {
+    if (this._bridgeListener) return
+    this._bridgeListener = (event) => {
+      const data = event && event.data
+      if (!data || typeof data !== 'object') return
+      if (data.source !== 'deepseek-pp-gal-bridge' || data.type !== 'GAL_ASSISTANT_TEXT') return
+      if (typeof data.text !== 'string') return
+      this.onBridgedAssistantText(data.text)
+    }
+    window.addEventListener('message', this._bridgeListener)
+  }
+
+  /** 桥送来的完整回复文本 → 结束本轮（与 DOM 兜底同一收尾路径） */
+  onBridgedAssistantText(rawText) {
+    if (!this.running || this.streaming) return
+    const clean = stripMarkdown(rawText)
+    if (!clean) return
+    this._lastDomText = clean
+    this.streaming = true
+    this.statusText = ''
+    this.lines.push({ kind: 'assistant', text: clean })
+    this.setLine('assistant', clean)
+    this.running = false
+    this._sentAt = null
+    this._lastActivityAt = Date.now()
+    this.syncToolActivity(true)
+    void this.bumpAffinity()
+    this.finishTurn(clean)
   }
 
   render() {
@@ -988,7 +994,7 @@ class GalStage {
     const today = new Date().toISOString().slice(0, 10)
     const gainedToday = char.affinityDate === today ? Math.max(0, Math.round(char.affinityToday || 0)) : 0
     if (gainedToday >= AFFINITY_DAILY_CAP) return
-    const gain = Math.max(1, Math.round((100 - current) / 25))
+    const gain = computeAffinityGain(current)
     const next = Math.min(100, current + gain)
     const patch = {
       ...char,
