@@ -22,6 +22,19 @@ vi.mock('../core/tool/history', () => ({
   appendToolCallHistory: vi.fn(),
 }));
 
+// The GAL character tool is a GAL-mode capability: it is only advertised while a
+// character is active, so this routing fixture pins an active character.
+vi.mock('../core/character/store', () => ({
+  getActiveCharacter: vi.fn(async () => ({
+    id: 'gal-char-fixture',
+    name: 'Fixture',
+    createdAt: 1,
+    updatedAt: 1,
+  })),
+  getAllCharacters: vi.fn(async () => []),
+  saveCharacter: vi.fn(),
+}));
+
 import {
   executeMcpToolCall,
   getMcpToolDescriptors,

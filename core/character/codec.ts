@@ -57,6 +57,8 @@ export function decodeGalCharacter(value: unknown, path = 'galCharacter'): GalCh
     systemPrompt: optionalString(object.systemPrompt, `${path}.systemPrompt`),
     memoryTags: optionalStringArray(object.memoryTags, `${path}.memoryTags`),
     affinity: optionalAffinity(object.affinity, `${path}.affinity`),
+    affinityDate: optionalString(object.affinityDate, `${path}.affinityDate`),
+    affinityToday: optionalAffinity(object.affinityToday, `${path}.affinityToday`),
     createdAt,
     updatedAt,
   };

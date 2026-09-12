@@ -37,6 +37,7 @@ import {
   GAL_CHARACTER_TOOL_PROVIDER,
   createGalCharacterToolDescriptors,
   executeGalCharacterToolCall,
+  shouldExposeGalCharacterTool,
 } from '../../core/character/tool';
 import {
   createMemoryToolDescriptors,
@@ -114,7 +115,10 @@ export function createProductionToolProviderRegistry(): ToolProviderRegistry {
     ),
     createLocalProvider(
       GAL_CHARACTER_TOOL_PROVIDER.id,
-      ({ locale }) => createGalCharacterToolDescriptors(locale),
+      async ({ locale }) => {
+        if (!await shouldExposeGalCharacterTool()) return [];
+        return createGalCharacterToolDescriptors(locale);
+      },
       (call, _descriptor, { locale }) => executeGalCharacterToolCall(call, locale),
     ),
     createLocalProvider(

@@ -1,6 +1,6 @@
 import { DEFAULT_LOCALE, translate, type SupportedLocale } from '../i18n/background';
 import type { JsonValue, ToolCall, ToolDescriptor, ToolProviderIdentity, ToolResult } from '../types';
-import { getAllCharacters, saveCharacter } from './store';
+import { getActiveCharacter, getAllCharacters, saveCharacter } from './store';
 
 /**
  * GAL character management tool — lets the model itself create / grow
@@ -20,6 +20,16 @@ export type GalCharacterToolName = typeof GAL_CHARACTER_TOOL_NAMES[number];
 
 export function isGalCharacterToolName(name: string): name is GalCharacterToolName {
   return (GAL_CHARACTER_TOOL_NAMES as readonly string[]).includes(name);
+}
+
+/**
+ * The character tool is a GAL-mode capability: only expose it while a
+ * character is actually active, so ordinary work conversations never create
+ * character cards by accident.
+ */
+export async function shouldExposeGalCharacterTool(): Promise<boolean> {
+  const active = await getActiveCharacter();
+  return Boolean(active?.id);
 }
 
 export function createGalCharacterToolDescriptors(locale: SupportedLocale = DEFAULT_LOCALE): ToolDescriptor[] {

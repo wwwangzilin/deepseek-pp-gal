@@ -556,6 +556,10 @@ export interface GalCharacter {
   memoryTags?: string[];
   /** Relationship value with the user, 0-100 (grows through conversation). */
   affinity?: number;
+  /** Local date (YYYY-MM-DD) of the last affinity gain, used by the daily cap. */
+  affinityDate?: string;
+  /** Affinity gained on that local date. */
+  affinityToday?: number;
   createdAt: number;
   updatedAt: number;
 }

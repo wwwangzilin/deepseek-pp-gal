@@ -120,6 +120,8 @@ async function bindConversationToGroupProject(group) {
   })
 }
 const GROUP_EVENT_MAX_LINES = 20
+/** 好感度每日增长封顶（防止刷满） */
+const AFFINITY_DAILY_CAP = 15
 /** 把一轮群聊发言追加进群组共享记忆（scope: project → 项目成员都能看到） */
 async function appendGroupEvent(group, speakerName, replyText) {
   if (!group || !group.projectId || !replyText) return
@@ -939,16 +941,26 @@ class GalStage {
     if (resolve) resolve(text || '')
   }
 
-  /** 每轮对话给当前角色涨一点好感（0-100，越亲近语气越不同） */
+  /** 每轮对话给当前角色涨一点好感：越亲近涨得越慢，且每日有封顶 */
   async bumpAffinity() {
     const char = getActiveCharacter()
     if (!char || !char.id) return
     const current = Math.round(char.affinity || 0)
-    const next = Math.min(100, current + 1)
-    if (next === current) return
+    if (current >= 100) return
+    const today = new Date().toISOString().slice(0, 10)
+    const gainedToday = char.affinityDate === today ? Math.max(0, Math.round(char.affinityToday || 0)) : 0
+    if (gainedToday >= AFFINITY_DAILY_CAP) return
+    const gain = Math.max(1, Math.round((100 - current) / 25))
+    const next = Math.min(100, current + gain)
+    const patch = {
+      ...char,
+      affinity: next,
+      affinityDate: today,
+      affinityToday: Math.min(AFFINITY_DAILY_CAP, gainedToday + gain),
+    }
     const idx = __galChars.findIndex((c) => c && c.id === char.id)
-    if (idx >= 0) __galChars[idx] = { ...__galChars[idx], affinity: next }
-    await saveCharacterRemote({ ...char, affinity: next })
+    if (idx >= 0) __galChars[idx] = patch
+    await saveCharacterRemote(patch)
     this.renderTopbar()
     this.updateStageContent()
   }
@@ -1451,7 +1463,7 @@ class GalStage {
     })
   }
 
-  /** 读档：恢复角色/群组/发言者与舞台剧情显示 */
+  /** 读档：恢复角色/群组/发言者与舞台剧情显示；可选同时新开对话以真正回到该剧情点 */
   async applySave(save) {
     if (!save) return
     await setActiveGroupRemote(save.groupId || null)
@@ -1462,7 +1474,19 @@ class GalStage {
     if (lastAssistant) this.setLine('assistant', lastAssistant.text)
     this.renderTopbar()
     this.updateStageContent()
-    this.showToolNote('📂 已读档「' + (save.name || '未命名存档') + '」（服务端会话历史不变）')
+    // 舞台显示已回到剧情点，但 DeepSeek 服务端会话仍记得之后的剧情；
+    // 若当前会话已有历史，询问是否新开对话（模型上下文才会真正回到「空白」）。
+    let freshStarted = false
+    if (this.pageHasHistory()) {
+      const wantFresh = confirm(
+        '已恢复舞台剧情点。\n\n是否同时开启新对话？\n· 确定：开启新对话（模型不再记得后续剧情，真正回到该剧情点）\n· 取消：保留当前会话（模型仍记得之后发生的事）',
+      )
+      if (wantFresh) freshStarted = this.tryClickNewChatButton()
+    }
+    this.showToolNote(
+      '📂 已读档「' + (save.name || '未命名存档') + '」'
+      + (freshStarted ? '（已开启新对话）' : '（服务端会话历史不变）'),
+    )
   }
 
   onCharacterChanged() {

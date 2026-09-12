@@ -103,6 +103,18 @@ Backend/unit tests use a hard 60-second timeout. After timeout or interruption, 
 
 README and other user-facing product documentation describe what users can do, not internal endpoints, wire formats, interception details, or architecture internals. Keep public copy natural and product-focused rather than template-heavy.
 
+## 质量门禁同步清单（GAL fork，2026-09-12 起）
+
+新增/删除 runtime 命令、改动版本号、改动 sidepanel 结构或 manifest 白名单时，必须同步下列"冻结契约"，否则 `ci:quality` 会在对应门禁红掉：
+
+- runtime 命令面：`docs/compatibility/runtime-command-inventory.md`（Live Background Router / Declared `MessageAction` Union / R4.x 分块三处清单与标题计数）、`tests/fixtures/runtime-contract/runtime.ts` 的 `RUNTIME_TOPOLOGY`、`tests/runtime-command-contract.test.ts` 的 `CUTOVER_LEDGER_SECTIONS` 与 `toHaveLength`、`tests/runtime-command-registry.test.ts` 的 typed/total 计数、`core/messaging/runtime-command-contracts.ts` 与 `runtime-boundary.ts` 白名单（DeepSeek content 真正会发的命令才进白名单，`runtime-boundary.test.ts` 要求白名单 == content 生产者实际发出的命令集）。
+- sidepanel 体积：`scripts/sidepanel-chunk-budget.mjs` 的 `BASELINE`（initialShell / firstChatScreen / 各 route chunk）必须按实测刷新并在注释登记原因。
+- manifest 策略：`scripts/manifest-policy-check.mjs` 的 web_accessible_resources 组数等断言随 `wxt.config.ts` 变更同步。
+- 版本发布：`package.json`、`packages/shell-host/package.json`、`package-lock.json`（顶层 / 根包 / shell-host 三处）必须同时 bump 到 tag 版本；`release.yml` 的 shell-host publish step 不可整段删除（`automation-contract-smoke` 要求保留 `npm publish --workspace packages/shell-host --access public` 与 `NPM_TOKEN secret is required` 文本，fork 以"无 token 时 exit 0 跳过"适配）。
+- 可执行位：`packages/shell-host/bin/*.mjs` 在 git 中保持 `100755`（Linux 上 `npm ci` 会补执行位，导致 `zip:sources` 判定工作树脏）。
+- 中文文案：`scripts/i18n-coverage-audit.mjs` 扫描 `core`/`entrypoints`/`scripts`/`wxt.config.ts`；新增中文要么走 i18n 资源，要么加入 path/line allowlist（GAL 单语模块用 path allowlist 并写明原因）。
+- Windows 本地无法执行的门禁（`sidepanel-runtime-transport-contract` 路径分隔符、`shell-host-*` 的 `spawnSync npm.cmd EINVAL`、`verify:release-assets` 的 zip 解压、`persistence-burst-budget` 5s 超时）以 CI（Linux）结果为准，不要据此判定回归。
+
 ## Governance
 
 - Do not create or restore a root `CLAUDE.md`; all shared project guidance belongs in `AGENTS.md`.
