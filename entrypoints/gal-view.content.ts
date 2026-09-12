@@ -15,6 +15,10 @@ import {
   GROUP_EVENT_NAME_PREFIX,
   groupEventMemoryName,
   groupIdFromEventMemoryName,
+  parseMentions,
+  voiceProfileFor,
+  currentDayPeriod,
+  localDateKey,
 } from './gal/helpers'
 /**
  * GAL 酒馆叠加层（ISOLATED world）— 移植自 ds-gal-tavern content.js
@@ -43,7 +47,7 @@ const STORAGE_ENABLED = 'dsgpp_gal_enabled'
 // localStorage；本页面只维护一份同步缓存供舞台渲染，写操作即时转发后台。
 let __galChars = []
 let __galActiveId = null
-let __galSettings = { enabled: false, characterCadence: 'every_message', proactiveEnabled: false, proactiveIdleMinutes: 10 }
+let __galSettings = { enabled: false, characterCadence: 'every_message', proactiveEnabled: false, proactiveIdleMinutes: 10, ttsEnabled: false, ttsRate: 1 }
 let __galGroups = []
 let __galActiveGroupId = null
 
@@ -77,6 +81,10 @@ async function refreshGalData() {
       proactiveIdleMinutes: typeof settings.proactiveIdleMinutes === 'number'
         ? Math.max(1, Math.min(240, Math.round(settings.proactiveIdleMinutes)))
         : 10,
+      ttsEnabled: settings.ttsEnabled === true,
+      ttsRate: typeof settings.ttsRate === 'number'
+        ? Math.max(0.5, Math.min(2, settings.ttsRate))
+        : 1,
     }
   }
   if (Array.isArray(groups)) __galGroups = groups
@@ -541,6 +549,19 @@ function sendToDeepSeek(text) {
   return true
 }
 
+function findRegenerateButton() {
+  const re = /(重新生成|重试|重新回答|regenerate|retry|resend)/i
+  for (const el of document.querySelectorAll('button, [role="button"], a')) {
+    const aria = String(el.getAttribute && (el.getAttribute('aria-label') || ''))
+    const title = String(el.getAttribute && (el.getAttribute('title') || ''))
+    const text = String(el.textContent || '').trim()
+    if (re.test(aria) || re.test(title) || (text.length > 0 && text.length < 16 && re.test(text))) {
+      return el
+    }
+  }
+  return null
+}
+
 /** 工具标签映射已抽到 entrypoints/gal/helpers.ts（toolLabel / TOOL_LABELS） */
 
 function readPageLastAssistantText() {
@@ -736,8 +757,31 @@ class GalStage {
     this._sentAt = null
     this._lastActivityAt = Date.now()
     this.syncToolActivity(true)
+    this.speakLine(clean)
     void this.bumpAffinity()
     this.finishTurn(clean)
+  }
+
+  /** TTS 台词朗读（设置可关；按角色 id 做固定音色区分，读前切断上一句） */
+  speakLine(text) {
+    if (__galSettings.ttsEnabled !== true) return
+    if (typeof window.speechSynthesis === 'undefined'
+      || typeof window.SpeechSynthesisUtterance === 'undefined') return
+    const content = stripMarkdown(String(text || ''))
+      .replace(/[（(][^）)]*[）)]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (!content) return
+    try {
+      const char = getActiveCharacter()
+      const profile = voiceProfileFor(char && char.id ? char.id : 'gal')
+      const utterance = new window.SpeechSynthesisUtterance(content.slice(0, 300))
+      utterance.lang = 'zh-CN'
+      utterance.pitch = profile.pitch
+      utterance.rate = Math.max(0.5, Math.min(2, (__galSettings.ttsRate || 1) * profile.rateScale))
+      window.speechSynthesis.cancel()
+      window.speechSynthesis.speak(utterance)
+    } catch { /* 语音不可用时静默降级 */ }
   }
 
   render() {
@@ -833,6 +877,7 @@ class GalStage {
         <button class="g-btn" data-act="groups">👥 ${escapeHtml(getActiveGroup() ? getActiveGroup().name : '群组')}</button>
         <button class="g-btn g-btn-accent" data-act="pick">🎭 选模式</button>
         <button class="g-btn" data-act="saves">💾 存档</button>
+        <button class="g-btn" data-act="regen" title="让 DeepSeek 重新生成上一条回复">🔁 重说</button>
         <button class="g-btn" data-act="original">原版界面</button>
         <button class="g-btn" data-act="disable" title="关闭 GAL 舞台并记住选择（下次刷新不自动打开）">⏻ 关闭 GAL</button>
       </div>`
@@ -846,6 +891,7 @@ class GalStage {
       if (btn.dataset.act === 'chars') this.togglePanel('chars')
       else if (btn.dataset.act === 'groups') this.togglePanel('groups')
       else if (btn.dataset.act === 'saves') this.togglePanel('saves')
+      else if (btn.dataset.act === 'regen') this.regenerateLast()
       else if (btn.dataset.act === 'pick') this.showModePicker()
       else if (btn.dataset.act === 'original') this.toggleView()
       else if (btn.dataset.act === 'disable') disableGalFromStage()
@@ -943,8 +989,17 @@ class GalStage {
       this.offerSaveRoleplayMode(text)
     }
     const group = getActiveGroup()
-    const speakers = this.pendingSpeakers(group)
-    if (!group || speakers.length === 0) {
+    if (!group) {
+      await this.sendTurn(text, true)
+      return
+    }
+    // @点名优先：只让被点到的成员发言；否则用面板里勾选的发言者
+    const members = groupMembers(group)
+    const mentioned = parseMentions(text, members.map((m) => m.name))
+    const speakers = mentioned.length > 0
+      ? members.filter((member) => mentioned.includes(member.name))
+      : this.pendingSpeakers(group)
+    if (speakers.length === 0) {
       await this.sendTurn(text, true)
       return
     }
@@ -955,6 +1010,7 @@ class GalStage {
   sendTurn(text, showPlayer) {
     return new Promise((resolve) => {
       this._turnResolve = resolve
+      try { if (window.speechSynthesis) window.speechSynthesis.cancel() } catch { /* ignore */ }
       if (showPlayer) {
         this.lines.push({ kind: 'player', text })
         this.currentLine = { kind: 'player', text }
@@ -1140,9 +1196,60 @@ class GalStage {
     }).join('')
   }
 
-  /** 空闲时角色主动搭话（由 startProactiveLoop 触发） */
-  async triggerProactive() {
+  /**
+   * 每日作息问候：同一时段（早/中/下午/晚/深夜）只问候一次；
+   * 复用「角色主动搭话」开关，关闭时完全不打扰。
+   */
+  async maybeDayGreeting() {
+    if (__galSettings.proactiveEnabled !== true) return
     if (this.running || this.queueRunning) return
+    const period = currentDayPeriod()
+    const today = localDateKey()
+    const mark = await galStorageGet('deepseek_pp_gal_day_greeting')
+    if (mark && typeof mark === 'object' && mark.date === today && mark.period === period) return
+    await galStorageSet('deepseek_pp_gal_day_greeting', { date: today, period })
+    const group = getActiveGroup()
+    const pool = group ? groupMembers(group) : [getActiveCharacter()].filter(Boolean)
+    if (pool.length === 0) return
+    const speaker = pool[Math.floor(Math.random() * pool.length)]
+    if (speaker.id !== __galActiveId) {
+      await setActiveCharacterRemote(speaker.id)
+      this.renderTopbar()
+      await new Promise((r) => setTimeout(r, 400))
+    }
+    this.showToolNote('🌤 ' + speaker.name + ' 向你打了个招呼…')
+    const reply = await this.sendTurn(
+      '（现在是' + period + '。你主动向主人打个' + period + '的招呼，一两句就好，别提这条提示）',
+      false,
+    )
+    await appendGroupEvent(group, speaker.name, reply)
+    this._lastActivityAt = Date.now()
+  }
+
+  /** 重说一次：点击页面的「重新生成」并等待新回复（桥/DOM 兜底会自动接管） */
+  regenerateLast() {
+    if (this.running || this.queueRunning) return
+    const button = findRegenerateButton()
+    if (!button) {
+      this.showToolNote('⚠️ 没找到「重新生成」按钮，请在原版界面手动重试')
+      return
+    }
+    try { if (window.speechSynthesis) window.speechSynthesis.cancel() } catch { /* ignore */ }
+    this.running = true
+    this.streaming = false
+    this.statusText = '重新生成中'
+    this._sentAt = Date.now()
+    this._lastDomText = ''
+    this.updateStageContent()
+    try { button.click() } catch {
+      this.running = false
+      this._sentAt = null
+      this.showToolNote('⚠️ 重新生成点击失败')
+    }
+  }
+
+  /** 空闲时角色主动搭话（由 startProactiveLoop 触发） */
+  async triggerProactive() {    if (this.running || this.queueRunning) return
     this._lastActivityAt = Date.now()
     const group = getActiveGroup()
     const pool = group ? groupMembers(group) : [getActiveCharacter()].filter(Boolean)
@@ -1195,6 +1302,7 @@ class GalStage {
         this._sentAt = null
         this._lastActivityAt = Date.now()
         this.syncToolActivity(true)
+        this.speakLine(clean)
         void this.bumpAffinity()
         this.finishTurn(clean)
       }
@@ -1805,6 +1913,10 @@ class GalStage {
         new ResizeObserver(() => window.__galStage && window.__galStage.measure()).observe(document.body)
       }
       maybeAutoOpenModePicker(window.__galStage)
+      // 每日作息问候（时段去重，开关关闭时不打扰）
+      setTimeout(() => {
+        try { window.__galStage && window.__galStage.maybeDayGreeting() } catch { /* ignore */ }
+      }, 3000)
       syncEntryButtonLabel()
       syncEntryVisibility()
     }

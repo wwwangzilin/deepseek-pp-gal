@@ -143,6 +143,37 @@ export default function GalSettingsPanel() {
         />
       </div>
 
+      <label className="flex items-center justify-between gap-3 py-2 cursor-pointer">
+        <span className="text-[12px]" style={{ color: 'var(--ds-text)' }}>
+          {t('sidepanel.galSettings.ttsLabel')}
+        </span>
+        <input
+          type="checkbox"
+          checked={settings.ttsEnabled === true}
+          onChange={(event) => void save({ ttsEnabled: event.target.checked })}
+        />
+      </label>
+      <p className="text-[11px]" style={{ color: 'var(--ds-text-secondary, #98a1c2)' }}>
+        {t('sidepanel.galSettings.ttsHint')}
+      </p>
+      <div className="flex items-center justify-between gap-3 py-2">
+        <span className="text-[12px]" style={{ color: 'var(--ds-text)' }}>
+          {t('sidepanel.galSettings.ttsRateLabel')}
+        </span>
+        <input
+          type="number"
+          min={0.5}
+          max={2}
+          step={0.1}
+          value={settings.ttsRate ?? 1}
+          onChange={(event) => void save({
+            ttsRate: Math.max(0.5, Math.min(2, Number(event.target.value) || 1)),
+          })}
+          className="w-20 rounded border bg-transparent px-2 py-1 text-[12px]"
+          style={{ color: 'var(--ds-text)', borderColor: 'var(--ds-border, rgba(255,255,255,.15))' }}
+        />
+      </div>
+
       {statusMessage && (
         <p className="text-[11px]" style={{ color: 'var(--ds-text-secondary, #98a1c2)' }}>
           {statusMessage}

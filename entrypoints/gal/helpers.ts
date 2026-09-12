@@ -111,3 +111,50 @@ export function groupIdFromEventMemoryName(name: unknown): string | null {
   const groupId = rest.split(/\s+/)[0];
   return groupId || null;
 }
+
+/**
+ * Group-chat @mentions: returns the mentioned character names in first-appearance
+ * order. Only exact member names count, so ordinary "@" text never hijacks the
+ * speaker list.
+ */
+export function parseMentions(text: unknown, memberNames: readonly string[]): string[] {
+  const raw = String(text ?? '');
+  if (!raw.includes('@')) return [];
+  const hits: Array<{ name: string; index: number }> = [];
+  for (const name of memberNames) {
+    if (!name) continue;
+    const index = raw.indexOf('@' + name);
+    if (index >= 0) hits.push({ name, index });
+  }
+  return hits.sort((a, b) => a.index - b.index).map((hit) => hit.name);
+}
+
+/** Deterministic TTS voice tuning per character (keeps each role distinguishable). */
+export function voiceProfileFor(seed: string): { pitch: number; rateScale: number } {
+  let hash = 0;
+  const raw = String(seed ?? '');
+  for (let i = 0; i < raw.length; i += 1) hash = (hash * 31 + raw.charCodeAt(i)) % 997;
+  return {
+    pitch: 0.9 + (hash % 4) * 0.1,
+    rateScale: 0.95 + (hash % 3) * 0.05,
+  };
+}
+
+/** Day period used for the once-per-period greeting. */
+export type GalDayPeriod = '深夜' | '早上' | '中午' | '下午' | '晚上';
+
+export function currentDayPeriod(date: Date = new Date()): GalDayPeriod {
+  const hour = date.getHours();
+  if (hour < 5) return '深夜';
+  if (hour < 11) return '早上';
+  if (hour < 14) return '中午';
+  if (hour < 18) return '下午';
+  if (hour < 23) return '晚上';
+  return '深夜';
+}
+
+export function localDateKey(date: Date = new Date()): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}

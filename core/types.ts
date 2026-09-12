@@ -578,6 +578,10 @@ export interface GalSettings {
   proactiveEnabled?: boolean;
   /** Idle minutes before a proactive message fires. */
   proactiveIdleMinutes?: number;
+  /** Read character lines aloud with the browser speech synthesis. */
+  ttsEnabled?: boolean;
+  /** Speech rate multiplier for TTS (0.5-2). */
+  ttsRate?: number;
 }
 
 /** Broadcast payload for character / GAL settings state changes. */

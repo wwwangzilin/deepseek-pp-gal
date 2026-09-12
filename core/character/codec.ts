@@ -9,6 +9,8 @@ export const DEFAULT_GAL_SETTINGS: GalSettings = {
   characterCadence: 'every_message',
   proactiveEnabled: false,
   proactiveIdleMinutes: 10,
+  ttsEnabled: false,
+  ttsRate: 1,
 };
 
 export const galCharacterCollectionCodec: VersionedValueCodec<GalCharacter[]> = {
@@ -82,11 +84,19 @@ export function normalizeGalSettings(value: unknown, path = 'galSettings'): GalS
   const rawIdle = typeof object.proactiveIdleMinutes === 'number' && Number.isFinite(object.proactiveIdleMinutes)
     ? Math.round(object.proactiveIdleMinutes)
     : DEFAULT_GAL_SETTINGS.proactiveIdleMinutes as number;
+  const ttsEnabled = typeof object.ttsEnabled === 'boolean'
+    ? object.ttsEnabled
+    : DEFAULT_GAL_SETTINGS.ttsEnabled;
+  const rawRate = typeof object.ttsRate === 'number' && Number.isFinite(object.ttsRate)
+    ? object.ttsRate
+    : DEFAULT_GAL_SETTINGS.ttsRate as number;
   return {
     enabled,
     characterCadence: cadence,
     proactiveEnabled,
     proactiveIdleMinutes: Math.max(1, Math.min(240, rawIdle)),
+    ttsEnabled,
+    ttsRate: Math.max(0.5, Math.min(2, rawRate)),
   };
 }
 
