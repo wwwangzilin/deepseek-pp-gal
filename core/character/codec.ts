@@ -62,6 +62,9 @@ export function decodeGalCharacter(value: unknown, path = 'galCharacter'): GalCh
     affinityDate: optionalString(object.affinityDate, `${path}.affinityDate`),
     affinityToday: optionalAffinity(object.affinityToday, `${path}.affinityToday`),
     relations: optionalRelations(object.relations, `${path}.relations`),
+    expressions: optionalExpressions(object.expressions, `${path}.expressions`),
+    scene: optionalString(object.scene, `${path}.scene`),
+    bgm: optionalString(object.bgm, `${path}.bgm`),
     createdAt,
     updatedAt,
   };
@@ -155,8 +158,7 @@ function optionalAffinity(value: unknown, path: string): number | undefined {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-/** Character-to-character relation map: plain record of 0-100 values. */
-function optionalRelations(value: unknown, path: string): Record<string, number> | undefined {
+/** Character-to-character relation map: plain record of 0-100 values. */function optionalRelations(value: unknown, path: string): Record<string, number> | undefined {
   if (value === undefined) return undefined;
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${path} must be an object`);
@@ -169,4 +171,24 @@ function optionalRelations(value: unknown, path: string): Record<string, number>
     out[key] = Math.max(0, Math.min(100, Math.round(raw)));
   }
   return out;
+}
+
+/** Emotion → portrait URL overrides; unknown keys and blanks are dropped. */
+function optionalExpressions(
+  value: unknown,
+  path: string,
+): GalCharacter['expressions'] | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${path} must be an object`);
+  }
+  const source = value as Record<string, unknown>;
+  const out: NonNullable<GalCharacter['expressions']> = {};
+  for (const key of ['happy', 'angry', 'shy', 'sad'] as const) {
+    const raw = source[key];
+    if (raw === undefined) continue;
+    if (typeof raw !== 'string') throw new Error(`${path}.${key} must be a string`);
+    if (raw.trim() !== '') out[key] = raw;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }

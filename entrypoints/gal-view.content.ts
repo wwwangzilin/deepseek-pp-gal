@@ -20,6 +20,8 @@ import {
   currentDayPeriod,
   localDateKey,
   groupRelationsSummary,
+  detectEmotion,
+  portraitFor,
 } from './gal/helpers'
 /**
  * GAL 酒馆叠加层（ISOLATED world）— 移植自 ds-gal-tavern content.js
@@ -718,6 +720,9 @@ class GalStage {
     this._turnResolve = null
     this._lastActivityAt = Date.now()
     this._relationsSummary = ''
+    this.currentEmotion = null
+    this.bgmEl = null
+    this.bgmMuted = false
 
     this.render()
     this.onCharacterChanged()
@@ -753,6 +758,7 @@ class GalStage {
     this._lastDomText = clean
     this.streaming = true
     this.statusText = ''
+    this.currentEmotion = detectEmotion(clean)
     this.lines.push({ kind: 'assistant', text: clean })
     this.setLine('assistant', clean)
     this.running = false
@@ -880,6 +886,7 @@ class GalStage {
         <button class="g-btn g-btn-accent" data-act="pick">🎭 选模式</button>
         <button class="g-btn" data-act="saves">💾 存档</button>
         <button class="g-btn" data-act="regen" title="让 DeepSeek 重新生成上一条回复">🔁 重说</button>
+        <button class="g-btn" data-act="bgm" title="背景音乐静音/开启">${this.bgmMuted ? '🔇' : '🔊'}</button>
         <button class="g-btn" data-act="original">原版界面</button>
         <button class="g-btn" data-act="disable" title="关闭 GAL 舞台并记住选择（下次刷新不自动打开）">⏻ 关闭 GAL</button>
       </div>`
@@ -894,6 +901,7 @@ class GalStage {
       else if (btn.dataset.act === 'groups') this.togglePanel('groups')
       else if (btn.dataset.act === 'saves') this.togglePanel('saves')
       else if (btn.dataset.act === 'regen') this.regenerateLast()
+      else if (btn.dataset.act === 'bgm') this.toggleBgmMuted()
       else if (btn.dataset.act === 'pick') this.showModePicker()
       else if (btn.dataset.act === 'original') this.toggleView()
       else if (btn.dataset.act === 'disable') disableGalFromStage()
@@ -947,6 +955,7 @@ class GalStage {
     if (this.dialogueEl) this.dialogueEl.addEventListener('click', () => this.onTextClick())
     this.measure()
     this.updateStageContent()
+    this.applyScene()
   }
 
   measure() {
@@ -1179,7 +1188,7 @@ class GalStage {
     this.castEl.innerHTML = cast.map((member, index) => {
       const left = startX + index * (width + gap)
       const color = member.color || '#ff8fa3'
-      const avatar = member.avatar || ASSET_AVATAR
+      const avatar = portraitFor(member, this.currentEmotion, ASSET_AVATAR)
       const on = single ? true : member.id === speakingId
       const dim = !on && speaking
       return `
@@ -1287,6 +1296,57 @@ class GalStage {
     })
   }
 
+  /**
+   * 应用角色/群组的场景背景与 BGM（角色优先，其次群组，最后内置素材）。
+   * 舞台渲染、切换角色、进出群组时都会调用。
+   */
+  applyScene() {
+    const char = getActiveCharacter()
+    const group = getActiveGroup()
+    const scene = (char && char.scene) || (group && group.scene) || ''
+    if (this.stageEl) {
+      const bg = scene
+        ? `background:linear-gradient(158deg,rgba(12,16,38,.25),rgba(10,13,28,.55)),url('${scene}') center/cover no-repeat`
+        : (ASSET_BG
+          ? `background:linear-gradient(158deg,rgba(12,16,38,.25),rgba(10,13,28,.55)),url('${ASSET_BG}') center/cover no-repeat`
+          : 'background:#0c1026')
+      this.stageEl.setAttribute('style', `width:${STAGE_W}px;height:${STAGE_H}px;${bg}`)
+    }
+    this.applyBgm((char && char.bgm) || (group && group.bgm) || '')
+  }
+
+  /** BGM 播放（浏览器自动播放策略会拦截未交互播放，失败静默；顶栏可静音） */
+  applyBgm(url) {
+    if (!this.bgmEl) {
+      const audio = document.createElement('audio')
+      audio.loop = true
+      audio.volume = 0.4
+      this.el.append(audio)
+      this.bgmEl = audio
+    }
+    if (this.bgmMuted || !url) {
+      try { this.bgmEl.pause() } catch { /* ignore */ }
+      if (!url) this.bgmEl.removeAttribute('src')
+      return
+    }
+    if (this.bgmEl.getAttribute('src') !== url) {
+      this.bgmEl.setAttribute('src', url)
+      try { this.bgmEl.load() } catch { /* ignore */ }
+    }
+    try {
+      const played = this.bgmEl.play()
+      if (played && typeof played.catch === 'function') played.catch(() => { /* 需用户交互 */ })
+    } catch { /* ignore */ }
+  }
+
+  /** 顶栏 BGM 静音切换 */
+  toggleBgmMuted() {
+    this.bgmMuted = !this.bgmMuted
+    this.applyScene()
+    this.renderTopbar()
+    this.showToolNote(this.bgmMuted ? '🔇 BGM 已静音' : '🔊 BGM 已开启')
+  }
+
   /** 空闲时角色主动搭话（由 startProactiveLoop 触发） */
   async triggerProactive() {    if (this.running || this.queueRunning) return
     this._lastActivityAt = Date.now()
@@ -1335,6 +1395,7 @@ class GalStage {
         this.streaming = true
         this.statusText = ''
         const clean = stripMarkdown(text)
+        this.currentEmotion = detectEmotion(clean)
         this.lines.push({ kind: 'assistant', text: clean })
         this.setLine('assistant', clean)
         this.running = false
@@ -1556,6 +1617,7 @@ class GalStage {
         this.renderTopbar()
         this.renderGroupPanel(panel)
         this.updateStageContent()
+        this.applyScene()
         this.showToolNote('👥 已进入群组，勾选本轮发言者后发送')
       })
       if (leave) leave.addEventListener('click', async () => {
@@ -1564,6 +1626,7 @@ class GalStage {
         this.renderTopbar()
         this.renderGroupPanel(panel)
         this.updateStageContent()
+        this.applyScene()
         this.showToolNote('已退出群组，回到单角色对话')
       })
     })
@@ -1697,6 +1760,7 @@ class GalStage {
     this.renderTopbar()
     // 自动载入该模式/角色的相关记忆（提升注入权重）
     loadMemoriesForMode(char, this)
+    this.applyScene()
   }
 
   destroy() {

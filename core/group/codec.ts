@@ -30,6 +30,8 @@ export function decodeGalGroup(value: unknown, path = 'galGroup'): GalGroup {
     description: optionalString(object.description, `${path}.description`),
     instructions: optionalString(object.instructions, `${path}.instructions`),
     projectId: optionalString(object.projectId, `${path}.projectId`),
+    scene: optionalString(object.scene, `${path}.scene`),
+    bgm: optionalString(object.bgm, `${path}.bgm`),
     memberIds: stringArray(object.memberIds, `${path}.memberIds`),
     createdAt,
     updatedAt,

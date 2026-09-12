@@ -562,6 +562,17 @@ export interface GalCharacter {
   affinityToday?: number;
   /** Character-to-character relationship values (characterId → 0-100). */
   relations?: Record<string, number>;
+  /** Emotion-specific portrait overrides (URL per emotion; falls back to avatar). */
+  expressions?: {
+    happy?: string;
+    angry?: string;
+    shy?: string;
+    sad?: string;
+  };
+  /** Stage background URL used while this character is on stage. */
+  scene?: string;
+  /** Background music URL looped while this character is on stage. */
+  bgm?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -605,6 +616,10 @@ export interface GalGroup {
   instructions?: string;
   /** Owning deepseek-pp project id (shared memory/context carrier). */
   projectId?: string;
+  /** Stage background URL for the whole group. */
+  scene?: string;
+  /** Background music URL looped for the whole group. */
+  bgm?: string;
   memberIds: string[];
   createdAt: number;
   updatedAt: number;

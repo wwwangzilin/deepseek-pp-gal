@@ -6,6 +6,39 @@
  * lives here so it is type-checked and unit-testable.
  */
 
+import type { GalCharacter } from '../../core/types';
+
+export type GalEmotion = 'happy' | 'angry' | 'shy' | 'sad';
+
+/**
+ * Cheap keyword emotion detection for portrait switching. Deliberately
+ * rule-based: it only picks a portrait override the user configured, so a
+ * wrong guess costs nothing but a picture.
+ */
+export function detectEmotion(text: unknown): GalEmotion | null {
+  const raw = String(text ?? '');
+  if (!raw) return null;
+  if (/(脸红|害羞|羞死|才不是|笨蛋|别说了|讨厌啦)/.test(raw)) return 'shy';
+  if (/(生气|愤怒|混账|混蛋|滚开|哼！|怒)/.test(raw)) return 'angry';
+  if (/(呜|哭|难过|伤心|寂寞|别走|舍不得)/.test(raw)) return 'sad';
+  if (/(笑|开心|哈哈|太好了|高兴|嘻嘻|愉快)/.test(raw)) return 'happy';
+  return null;
+}
+
+/** Portrait for the current emotion, falling back to the base avatar. */
+export function portraitFor(
+  character: Pick<GalCharacter, 'avatar' | 'expressions'> | null | undefined,
+  emotion: GalEmotion | null,
+  fallback: string,
+): string {
+  if (!character) return fallback;
+  if (emotion) {
+    const override = character.expressions?.[emotion];
+    if (override) return override;
+  }
+  return character.avatar || fallback;
+}
+
 /** Tool name → friendly Chinese label for the stage status pill. */
 export const TOOL_LABELS: Record<string, string> = {
   web_search: '联网搜索',

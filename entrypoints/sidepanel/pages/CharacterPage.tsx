@@ -859,6 +859,8 @@ function GroupForm({
     name: existing?.name ?? GROUP_EMPTY.name,
     description: existing?.description ?? '',
     instructions: existing?.instructions ?? '',
+    scene: existing?.scene ?? '',
+    bgm: existing?.bgm ?? '',
     memberIds: existing?.memberIds ? [...existing.memberIds] : [],
   }));
   const [saving, setSaving] = useState(false);
@@ -880,6 +882,8 @@ function GroupForm({
         name: draft.name.trim(),
         description: draft.description.trim(),
         instructions: draft.instructions.trim(),
+        scene: draft.scene.trim() || undefined,
+        bgm: draft.bgm.trim() || undefined,
         memberIds: draft.memberIds,
       }, existing?.id ?? null);
     } finally {
@@ -928,6 +932,26 @@ function GroupForm({
           style={inputStyle}
           value={draft.instructions}
           onChange={(event) => setDraft((c) => ({ ...c, instructions: event.target.value }))}
+        />
+      </label>
+
+      <label className="block text-[11px]" style={{ color: 'var(--ds-text-secondary, #98a1c2)' }}>
+        {t('sidepanel.characterPage.form.sceneLabel')}
+        <input
+          className="mt-1 w-full rounded border bg-transparent px-2 py-1.5 text-[13px]"
+          style={inputStyle}
+          value={draft.scene ?? ''}
+          onChange={(event) => setDraft((c) => ({ ...c, scene: event.target.value }))}
+        />
+      </label>
+
+      <label className="block text-[11px]" style={{ color: 'var(--ds-text-secondary, #98a1c2)' }}>
+        {t('sidepanel.characterPage.form.bgmLabel')}
+        <input
+          className="mt-1 w-full rounded border bg-transparent px-2 py-1.5 text-[13px]"
+          style={inputStyle}
+          value={draft.bgm ?? ''}
+          onChange={(event) => setDraft((c) => ({ ...c, bgm: event.target.value }))}
         />
       </label>
 
@@ -1012,6 +1036,8 @@ const EDIT_FIELDS: Array<{ key: keyof Omit<CharacterDraft, 'memoryTags' | 'name'
   { key: 'exampleDialogue', labelKey: 'exampleLabel' },
   { key: 'greeting', labelKey: 'greetingLabel' },
   { key: 'systemPrompt', labelKey: 'systemLabel' },
+  { key: 'scene', labelKey: 'sceneLabel' },
+  { key: 'bgm', labelKey: 'bgmLabel' },
 ];
 
 function CharacterForm({
@@ -1040,6 +1066,8 @@ function CharacterForm({
         systemPrompt: existing.systemPrompt ?? '',
         memoryTags: existing.memoryTags ?? [],
         affinity: existing.affinity ?? 0,
+        relations: existing.relations,
+        expressions: existing.expressions,
       }
       : {}),
   }));
@@ -1144,6 +1172,25 @@ function CharacterForm({
           </span>
         </div>
       </label>
+
+      <div className="block text-[11px]" style={{ color: 'var(--ds-text-secondary, #98a1c2)' }}>
+        {t('sidepanel.characterPage.form.expressionsLabel')}
+        <div className="grid grid-cols-2 gap-2 mt-1">
+          {(['happy', 'angry', 'shy', 'sad'] as const).map((emotion) => (
+            <input
+              key={emotion}
+              className="rounded border bg-transparent px-2 py-1 text-[12px]"
+              style={inputStyle}
+              placeholder={t(`sidepanel.characterPage.form.emotion.${emotion}`)}
+              value={draft.expressions?.[emotion] ?? ''}
+              onChange={(event) => setDraft((current) => ({
+                ...current,
+                expressions: { ...(current.expressions ?? {}), [emotion]: event.target.value },
+              }))}
+            />
+          ))}
+        </div>
+      </div>
 
       <div className="flex gap-2 pt-1">
         <button
