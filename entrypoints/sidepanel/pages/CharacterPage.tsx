@@ -52,6 +52,7 @@ export default function CharacterPage() {
   const [statusMessage, setStatusMessage] = useState('');
   const fence = useRef(createRequestGenerationFence());
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const dataInputRef = useRef<HTMLInputElement | null>(null);
 
   const fail = useCallback((error: unknown) => {
     setStatusMessage(t('sidepanel.characterPage.operationFailed', {
@@ -243,6 +244,117 @@ export default function CharacterPage() {
   };
 
   /** Exports the character as a PNG card (SillyTavern can read it). */
+  /** Exports all GAL data (characters / groups / settings / story saves) as one JSON file. */
+  const handleExportAll = async () => {
+    try {
+      const [characterList, groupList, settings] = await Promise.all([
+        sidepanelRuntimeClient.request(
+          { type: 'GET_CHARACTERS' },
+          {
+            unavailableMessage: t('sidepanel.characterPage.backendUnavailable'),
+            decode: (value) => decodeGalCharacterCollection(value, 'exportCharacters'),
+          },
+        ),
+        sidepanelRuntimeClient.request(
+          { type: 'GET_GROUPS' },
+          {
+            acceptFailure: true,
+            unavailableMessage: t('sidepanel.characterPage.backendUnavailable'),
+            decode: (value) => decodeGalGroupCollection(value, 'exportGroups'),
+          },
+        ),
+        sidepanelRuntimeClient.request(
+          { type: 'GET_GAL_SETTINGS' },
+          {
+            acceptFailure: true,
+            unavailableMessage: t('sidepanel.characterPage.backendUnavailable'),
+            decode: (value) => value,
+          },
+        ),
+      ]);
+      let saves: unknown = [];
+      try {
+        const stored = await chrome.storage.local.get('deepseek_pp_gal_saves');
+        saves = stored.deepseek_pp_gal_saves ?? [];
+      } catch { saves = []; }
+      const payload = {
+        schema: 'deepseek-pp-gal-export',
+        version: 1,
+        exportedAt: Date.now(),
+        characters: characterList,
+        groups: groupList,
+        settings,
+        saves,
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `deepseek-pp-gal-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      setStatusMessage(t('sidepanel.characterPage.exportAllDone'));
+    } catch (error) {
+      fail(error);
+    }
+  };
+
+  /** Imports all GAL data (characters upserted one by one, plus groups, settings and merged saves). */
+  const handleImportAll = async (file: File | null) => {
+    if (!file) return;
+    const generation = fence.current.begin();
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      const characters = Array.isArray(parsed.characters) ? parsed.characters : [];
+      const groups = Array.isArray(parsed.groups) ? parsed.groups : [];
+      let imported = 0;
+      for (const character of characters) {
+        await sidepanelRuntimeClient.request(
+          { type: 'SAVE_CHARACTER', payload: character as NewGalCharacter },
+          {
+            unavailableMessage: t('sidepanel.characterPage.backendUnavailable'),
+            decode: (value) => value,
+          },
+        );
+        imported += 1;
+      }
+      for (const group of groups) {
+        await sidepanelRuntimeClient.request(
+          { type: 'SAVE_GROUP', payload: group as NewGalGroup },
+          {
+            unavailableMessage: t('sidepanel.characterPage.backendUnavailable'),
+            decode: (value) => value,
+          },
+        );
+      }
+      if (parsed.settings && typeof parsed.settings === 'object') {
+        await sidepanelRuntimeClient.request(
+          { type: 'SAVE_GAL_SETTINGS', payload: parsed.settings as Partial<GalSettings> },
+          {
+            unavailableMessage: t('sidepanel.characterPage.backendUnavailable'),
+            decode: (value) => value,
+          },
+        );
+      }
+      if (Array.isArray(parsed.saves) && parsed.saves.length > 0) {
+        const stored = await chrome.storage.local.get('deepseek_pp_gal_saves');
+        const existing = Array.isArray(stored.deepseek_pp_gal_saves) ? stored.deepseek_pp_gal_saves : [];
+        await chrome.storage.local.set({
+          deepseek_pp_gal_saves: [...parsed.saves, ...existing].slice(0, 40),
+        });
+      }
+      if (!fence.current.isCurrent(generation)) return;
+      await load();
+      setStatusMessage(t('sidepanel.characterPage.importAllDone', { count: imported }));
+    } catch (error) {
+      if (!fence.current.isCurrent(generation)) return;
+      setStatusMessage(t('sidepanel.characterPage.importAllFailed', {
+        error: getRuntimeErrorMessage(error),
+      }));
+    }
+  };
+
   const handleExportCard = (character: GalCharacter) => {
     try {
       const png = buildCharacterCardPng(character);
@@ -339,6 +451,30 @@ export default function CharacterPage() {
               style={{ display: 'none' }}
               onChange={(event) => {
                 void handleImportCards(event.target.files);
+                event.target.value = '';
+              }}
+            />
+            <button
+              type="button"
+              className="ds-btn text-[12px]"
+              onClick={() => void handleExportAll()}
+            >
+              ⬇ {t('sidepanel.characterPage.exportAll')}
+            </button>
+            <button
+              type="button"
+              className="ds-btn text-[12px]"
+              onClick={() => dataInputRef.current?.click()}
+            >
+              ⬆ {t('sidepanel.characterPage.importAll')}
+            </button>
+            <input
+              ref={dataInputRef}
+              type="file"
+              accept="application/json,.json"
+              style={{ display: 'none' }}
+              onChange={(event) => {
+                void handleImportAll(event.target.files?.[0] ?? null);
                 event.target.value = '';
               }}
             />
@@ -540,7 +676,7 @@ function CharacterDiary({
             continue;
           }
           if (!name.startsWith('gal-group:')) continue;
-          const groupId = name.slice('gal-group:'.length).split(/\s+/)[0];
+          const groupId = name.slice('gal-group:'.length).split('#')[0].split(/\s+/)[0];
           if (!myGroupIds.includes(groupId)) continue;
           const groupName = groups.find((group) => group.id === groupId)?.name || groupId;
           const lines = String(memory.content || '').split('\n');

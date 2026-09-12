@@ -1,4 +1,4 @@
-import type { GalCharacter } from '../types';
+import type { GalCharacter, GalCharacterCadence } from '../types';
 
 type PersonaFields = Pick<
   GalCharacter,
@@ -43,9 +43,28 @@ export function buildCharacterPersona(char: PersonaFields | null | undefined): s
   return parts.join('\n\n');
 }
 
+/**
+ * Single authority for "which persona prefixes this turn's request":
+ * an active GAL character replaces the user preset (never merged with it);
+ * without a character the caller-computed preset content is used unchanged.
+ * Shared by the page interceptor and the sidepanel chat path so both behave
+ * identically.
+ */
+export function resolveTurnPersona(input: {
+  activeCharacter: GalCharacter | null;
+  presetContent: string | null;
+  characterCadence: GalCharacterCadence;
+  isFirstMessage: boolean;
+}): string | null {
+  const { activeCharacter, presetContent, characterCadence, isFirstMessage } = input;
+  if (!activeCharacter) return presetContent;
+  if (characterCadence === 'off') return null;
+  if (characterCadence === 'first_message' && !isFirstMessage) return null;
+  return buildCharacterPersona(activeCharacter);
+}
+
 /** Built-in seed character (shown when the character library is empty). */
-export function defaultGalCharacters(): Array<Omit<GalCharacter, 'createdAt' | 'updatedAt'>> {
-  return [
+export function defaultGalCharacters(): Array<Omit<GalCharacter, 'createdAt' | 'updatedAt'>> {  return [
     {
       id: 'gal-char-deepseek-niang',
       name: 'DeepSeek娘',

@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   decodeThemeUpdatedEvent,
@@ -12,7 +12,7 @@ describe('Side Panel runtime transport contract', () => {
   it('keeps chrome.runtime.sendMessage behind the typed runtime client', () => {
     const directTransportFiles = sourceFiles(SIDEPANEL_ROOT)
       .filter((file) => readFileSync(file, 'utf8').includes('chrome.runtime.sendMessage'))
-      .map((file) => relative('.', file));
+      .map((file) => relative('.', file).split(sep).join('/'));
 
     expect(directTransportFiles).toEqual(['entrypoints/sidepanel/runtime-client.ts']);
   });
@@ -68,7 +68,9 @@ function sourceFiles(root: string): string[] {
     .flatMap((entry) => {
       const path = join(root, entry.name);
       if (entry.isDirectory()) return sourceFiles(path);
-      return /\.tsx?$/.test(entry.name) ? [path] : [];
+      // Normalize to POSIX separators so the fixture comparison is
+      // platform-independent (Windows would otherwise produce backslashes).
+      return /\.tsx?$/.test(entry.name) ? [path.split(sep).join('/')] : [];
     })
     .sort();
 }

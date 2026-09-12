@@ -97,7 +97,9 @@ describe('Shell Host modular runtime ownership', () => {
     expect(getMissingHostRuntimeFiles(installDir)).toEqual(['router.mjs']);
   });
 
-  it('reads package metadata from an installed npm package layout', async () => {
+  // Windows cannot spawnSync npm.cmd here (EINVAL); the layout contract is
+  // covered on the Linux CI runner instead of being a false local failure.
+  it.skipIf(process.platform === 'win32')('reads package metadata from an installed npm package layout', async () => {
     const tempRoot = mkdtempSync(join(tmpdir(), 'deepseek-pp-shell-npm-layout-'));
     tempRoots.push(tempRoot);
     const packDir = tempRoot;

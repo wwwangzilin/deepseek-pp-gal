@@ -56,6 +56,7 @@ import {
   setActiveGroupId,
 } from '../core/group/store';
 import { saveGroupWithSharedProject } from './background/group-project';
+import { resolveTurnPersona } from '../core/character/persona';
 import { getDeepSeekTheme, saveDeepSeekTheme } from '../core/theme/store';
 import { getBackgroundConfig, saveBackgroundConfig, clearBackgroundConfig } from '../core/background/store';
 import { getPetConfig, savePetConfig, clearPetConfig } from '../core/pet/store';
@@ -1561,6 +1562,19 @@ async function buildSidepanelPrompt(request: ChatPromptBuildRequest): Promise<{
     messageCount: request.messageCount,
     cadence: promptSettings.presetCadence,
   });
+  // Same persona authority as the page interceptor: an active GAL character
+  // replaces the user preset here too, so a character answers as themselves in
+  // the sidepanel chat instead of losing its persona.
+  const [activeCharacter, galSettings] = await Promise.all([
+    getActiveCharacter(),
+    getGalSettings(),
+  ]);
+  const presetContent = resolveTurnPersona({
+    activeCharacter,
+    presetContent: shouldInjectPreset ? activePreset?.content ?? null : null,
+    characterCadence: galSettings.characterCadence,
+    isFirstMessage: request.isFirstMessage,
+  });
 
   const sidepanelDescriptors = filterSidepanelChatToolDescriptors(toolDescriptors);
   const enabledDescriptors = projectMcpCapabilityDescriptors({
@@ -1576,7 +1590,7 @@ async function buildSidepanelPrompt(request: ChatPromptBuildRequest): Promise<{
   const modelFacingDescriptors = filterRetiredModelFacingTools(enabledDescriptors);
   const { augmented } = buildPromptAugmentation(request.prompt, {
     memories: memories.filter((memory) => memory.scope !== 'project'),
-    presetContent: shouldInjectPreset ? activePreset?.content ?? null : null,
+    presetContent,
     toolDescriptors: modelFacingDescriptors,
     thinkingEnabled: false,
     locale: currentBackgroundLocale,

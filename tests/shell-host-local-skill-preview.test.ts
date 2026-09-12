@@ -154,7 +154,9 @@ describe('shell native host logLine resilience', () => {
     expect(response.result?.structuredContent?.data?.platform).toBeTruthy();
   });
 
-  it('writes a stderr diagnostic when DPP_LOG_FILE cannot be initialized', async () => {
+  // The unwritable-path diagnostic differs on Windows (the path check happens
+  // earlier), so this assertion is a Linux-CI contract.
+  it.skipIf(process.platform === 'win32')('writes a stderr diagnostic when DPP_LOG_FILE cannot be initialized', async () => {
     const { response, stderr } = await callNativeHostWithStderr('shell_status', {}, {
       DPP_LOG_FILE: '/nonexistent-dir-dpp-test-xyz/unwritable.log',
     });

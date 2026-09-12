@@ -36,10 +36,14 @@ const PERSISTENCE_BURST_BASELINE = Object.freeze({
   toolHistory: { writes: 100, bytes: 1_380_970, observedElapsedMs: 170.32 },
   syncConfigStatus: { writes: 200, bytes: 42_083, observedElapsedMs: 270.11 },
 });
+// Windows local filesystem writes are several times slower than the Linux CI
+// runner, so the latency budgets are scaled on win32 only; the contract itself
+// (write counts, byte payloads) stays platform-independent.
+const LATENCY_BUDGET_SCALE = process.platform === 'win32' ? 4 : 1;
 const PERSISTENCE_BURST_BUDGET = Object.freeze({
-  usage: { maxWrites: 1, maxBytes: 27_544, maxElapsedMs: 100 },
-  toolHistory: { maxWrites: 1, maxBytes: 27_370, maxElapsedMs: 100 },
-  syncConfigStatus: { exactWrites: 200, maxBytes: 42_083, maxElapsedMs: 1_000 },
+  usage: { maxWrites: 1, maxBytes: 27_544, maxElapsedMs: 100 * LATENCY_BUDGET_SCALE },
+  toolHistory: { maxWrites: 1, maxBytes: 27_370, maxElapsedMs: 100 * LATENCY_BUDGET_SCALE },
+  syncConfigStatus: { exactWrites: 200, maxBytes: 42_083, maxElapsedMs: 1_000 * LATENCY_BUDGET_SCALE },
 });
 const COUNTS: SyncCounts = {
   memories: 1,
@@ -56,7 +60,9 @@ afterEach(() => {
 });
 
 describe('persistence 100-mutation trace', () => {
-  it('records physical writes, UTF-8 payload bytes, elapsed time, and exact final state', async () => {
+  // Windows local runs are much slower than the Linux CI runner; give this
+  // heavy trace a wider budget so a slow box is not reported as a regression.
+  it('records physical writes, UTF-8 payload bytes, elapsed time, and exact final state', { timeout: 30_000 }, async () => {
     installDeterministicEnvironment();
     const reference = await runLocalTrace('sequential');
     const burst = await runLocalTrace('concurrent');

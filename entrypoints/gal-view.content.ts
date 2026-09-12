@@ -119,39 +119,77 @@ async function bindConversationToGroupProject(group) {
     url: String(conv.url || ''),
   })
 }
-const GROUP_EVENT_MAX_LINES = 20
 /** 好感度每日增长封顶（防止刷满） */
 const AFFINITY_DAILY_CAP = 15
-/** 把一轮群聊发言追加进群组共享记忆（scope: project → 项目成员都能看到） */
+/** 每条群组事件记忆最多容纳的发言行数（写满后开新分卷，历史不丢） */
+const GROUP_EVENT_MAX_LINES = 20
+/** 群组事件记忆保留的分卷数（超出后删除最旧一卷） */
+const GROUP_EVENT_MAX_CHUNKS = 5
+const GROUP_EVENT_NAME_PREFIX = 'gal-group:'
+
+/**
+ * 把一轮群聊发言追加进群组共享记忆（scope: project → 项目成员都能看到）。
+ * 采用「分卷」写法：单卷写满 20 行后新建下一卷，并只保留最近若干卷，
+ * 避免旧版单条滚动导致的写放大与早期事件丢失。
+ */
 async function appendGroupEvent(group, speakerName, replyText) {
   if (!group || !group.projectId || !replyText) return
   const text = stripMarkdown(replyText).replace(/\s+/g, ' ').trim().slice(0, 140)
   if (!text) return
-  const name = 'gal-group:' + group.id
+  const baseName = GROUP_EVENT_NAME_PREFIX + group.id
   const memories = await runtimeSend('GET_MEMORIES')
   const list = Array.isArray(memories) ? memories : []
-  const existing = list.find((m) => m && String(m.name || '').startsWith(name))
-  const prevLines = existing && typeof existing.content === 'string'
-    ? existing.content.split('\n').map((line) => line.trim()).filter(Boolean)
-    : []
-  const content = [...prevLines, '【' + speakerName + '】' + text]
-    .slice(-GROUP_EVENT_MAX_LINES)
-    .join('\n')
+  const chunks = list
+    .filter((m) => m && String(m.name || '').startsWith(baseName))
+    .map((m) => {
+      const suffix = String(m.name).slice(baseName.length).replace(/^#/, '')
+      const index = Number.parseInt(suffix, 10)
+      return { memory: m, index: Number.isFinite(index) ? index : 0 }
+    })
+    .sort((a, b) => a.index - b.index)
+  const latest = chunks[chunks.length - 1]
+  const line = '【' + speakerName + '】' + text
   const tags = [group.name || '群组', '群聊事件']
-  if (existing && existing.id != null) {
-    await runtimeSend('UPDATE_MEMORY', { ...existing, name, content, tags })
-    return
+
+  const writeChunk = async (index) => {
+    const name = baseName + '#' + index
+    await runtimeSend('SAVE_MEMORY', {
+      type: 'topic',
+      scope: 'project',
+      projectId: group.projectId,
+      name,
+      content: line,
+      description: '',
+      tags,
+      pinned: false,
+    })
   }
-  await runtimeSend('SAVE_MEMORY', {
-    type: 'topic',
-    scope: 'project',
-    projectId: group.projectId,
-    name,
-    content,
-    description: '',
-    tags,
-    pinned: false,
-  })
+
+  if (latest && latest.memory.id != null) {
+    const prevLines = typeof latest.memory.content === 'string'
+      ? latest.memory.content.split('\n').map((l) => l.trim()).filter(Boolean)
+      : []
+    if (prevLines.length < GROUP_EVENT_MAX_LINES) {
+      await runtimeSend('UPDATE_MEMORY', {
+        ...latest.memory,
+        name: baseName + '#' + latest.index,
+        content: [...prevLines, line].join('\n'),
+        tags,
+      })
+      return
+    }
+    await writeChunk(latest.index + 1)
+  } else {
+    await writeChunk(1)
+  }
+
+  // 只保留最近若干卷，避免项目记忆无限膨胀
+  const overflow = [...chunks].slice(0, Math.max(0, chunks.length - (GROUP_EVENT_MAX_CHUNKS - 1)))
+  for (const stale of overflow) {
+    if (stale.memory && stale.memory.id != null) {
+      await runtimeSend('DELETE_MEMORY', { id: stale.memory.id })
+    }
+  }
 }
 function getCharacters() { return __galChars.slice() }
 function getCharacterById(id) { return __galChars.find((c) => c && c.id === id) || null }
