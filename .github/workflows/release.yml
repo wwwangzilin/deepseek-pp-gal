@@ -71,13 +71,64 @@ jobs:
       - name: Run release quality gates
         run: npm run ci:quality
 
-      - name: Skip publishing the upstream npm package (GAL fork)
+      - name: Publish Shell Host npm package
         shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
-          # GAL fork: the upstream package name deepseek-pp-shell-host belongs to the
-          # upstream repository, and publishing it would require the upstream NPM_TOKEN
-          # secret. Releases on this fork only build and attach the browser zips.
-          echo "Skipping npm publish of deepseek-pp-shell-host (GAL fork)"
+          TAG="${INPUT_TAG:-${GITHUB_REF_NAME}}"
+          VERSION="${TAG#v}"
+          ROOT_VERSION="$(node -p "require('./package.json').version")"
+          SHELL_VERSION="$(node -p "require('./packages/shell-host/package.json').version")"
+
+          if [ "$ROOT_VERSION" != "$VERSION" ]; then
+            echo "package.json version $ROOT_VERSION does not match release tag $TAG" >&2
+            exit 1
+          fi
+          if [ "$SHELL_VERSION" != "$VERSION" ]; then
+            echo "packages/shell-host/package.json version $SHELL_VERSION does not match release tag $TAG" >&2
+            exit 1
+          fi
+
+          read_published_version() {
+            npm view "deepseek-pp-shell-host@$VERSION" version --prefer-online 2>/dev/null || true
+          }
+
+          wait_for_published_version() {
+            local attempts="$1"
+            local attempt
+            PUBLISHED_VERSION=""
+            for attempt in $(seq 1 "$attempts"); do
+              PUBLISHED_VERSION="$(read_published_version)"
+              if [ "$PUBLISHED_VERSION" = "$VERSION" ]; then
+                return 0
+              fi
+              if [ "$attempt" -lt "$attempts" ]; then
+                sleep 5
+              fi
+            done
+            return 1
+          }
+
+          if wait_for_published_version 1; then
+            echo "deepseek-pp-shell-host@$VERSION is already published"
+            exit 0
+          fi
+
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            # GAL fork: the upstream package name deepseek-pp-shell-host belongs to the
+            # upstream repository. Without an NPM_TOKEN secret this fork skips the publish
+            # instead of failing the release (the browser zips are still attached below).
+            echo "NPM_TOKEN secret is required to publish deepseek-pp-shell-host@$VERSION; skipping on this fork." >&2
+            exit 0
+          fi
+
+          npm publish --workspace packages/shell-host --access public
+          if ! wait_for_published_version 12; then
+            echo "npm publish completed but registry does not expose deepseek-pp-shell-host@$VERSION" >&2
+            exit 1
+          fi
 
       - name: Locate packages
         id: package
